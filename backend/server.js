@@ -19,6 +19,7 @@ const BASE_ALLOWED = new Set([
   'http://localhost:5173',
   'http://localhost:5175',
   'https://pp-capital.vercel.app',
+  'https://mutual-funds-lkb2.vercel.app', // Frontend deployment
   ...STATIC_ALLOWED,
 ]);
 
@@ -27,11 +28,14 @@ const CURRENT_DEPLOY_ORIGIN = process.env.VERCEL_URL
   ? `https://${process.env.VERCEL_URL}`
   : null;
 
-// Project-scoped preview matcher: pp-capital-xxxxx.vercel.app
+// Project-scoped preview matcher: matches both pp-capital-* and mutual-funds-* on vercel.app
 function isProjectPreview(origin) {
   try {
-    const host = new URL(origin).hostname; // e.g. pp-capital-5n7x.vercel.app
-    return host.endsWith('.vercel.app') && host.startsWith('pp-capital');
+    const host = new URL(origin).hostname;
+    return host.endsWith('.vercel.app') && 
+           (host.startsWith('pp-capital') || 
+            host.startsWith('mutual-funds') ||
+            host.includes('mutual-fund')); // handles mutual-fund-* variations
   } catch {
     return false;
   }
