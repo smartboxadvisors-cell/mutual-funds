@@ -273,6 +273,78 @@
   font-size: 0.8rem;
 }
 
+/* Trading Transactions Table */
+.transactionsTable {
+  overflow-x: auto;
+}
+
+.transactionsTable .table {
+  min-width: 1200px; /* Ensure table doesn't get too narrow */
+}
+
+.transactionsTable th,
+.transactionsTable td {
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  max-width: 150px;
+  overflow: hidden;
+}
+
+.transactionsTable .isin {
+  font-family: monospace;
+  font-size: 0.85rem;
+}
+
+.transactionsTable .issuer {
+  max-width: 200px;
+}
+
+.transactionsTable .amount,
+.transactionsTable .price {
+  text-align: right;
+  font-family: monospace;
+}
+
+.transactionsTable .yield {
+  text-align: center;
+}
+
+.transactionsTable .status {
+  text-align: center;
+  font-weight: 500;
+  padding: 4px 8px;
+  border-radius: 4px;
+  font-size: 0.8rem;
+}
+
+.transactionsTable .status.executed {
+  background: #d4edda;
+  color: #155724;
+}
+
+.transactionsTable .status.pending {
+  background: #fff3cd;
+  color: #856404;
+}
+
+.transactionsTable .dealType {
+  text-align: center;
+  font-weight: 500;
+  padding: 4px 8px;
+  border-radius: 4px;
+  font-size: 0.8rem;
+}
+
+.transactionsTable .dealType.buy {
+  background: #d4edda;
+  color: #155724;
+}
+
+.transactionsTable .dealType.sell {
+  background: #f8d7da;
+  color: #721c24;
+}
+
 /* Responsive Design */
 @media (max-width: 768px) {
   .container {
@@ -311,6 +383,15 @@
   .table th, .table td {
     padding: 8px;
   }
+
+  .transactionsTable .table {
+    min-width: 1000px;
+  }
+
+  .transactionsTable th,
+  .transactionsTable td {
+    max-width: 120px;
+  }
 }
 
 @media (max-width: 480px) {
@@ -328,5 +409,16 @@
 
   .tradingPanel {
     padding: 15px;
+  }
+
+  .transactionsTable .table {
+    min-width: 800px;
+    font-size: 0.8rem;
+  }
+
+  .transactionsTable th,
+  .transactionsTable td {
+    max-width: 100px;
+    padding: 6px;
   }
 }

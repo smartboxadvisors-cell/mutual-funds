@@ -1,5 +1,6 @@
 // src/components/Trading.jsx
 import { useState, useEffect } from 'react';
+import TradingUploadSection from './TradingUploadSection';
 import styles from '../styles/trading.module.css';
 
 export default function Trading() {
@@ -8,6 +9,7 @@ export default function Trading() {
   const [quantity, setQuantity] = useState('');
   const [price, setPrice] = useState('');
   const [isBuy, setIsBuy] = useState(true);
+  const [tradingTransactions, setTradingTransactions] = useState([]);
 
   // Sample trading data - in a real app, this would come from an API
   const [portfolio, setPortfolio] = useState([
@@ -139,6 +141,47 @@ export default function Trading() {
 
   return (
     <div className={styles.container}>
+      {/* Trading Data Upload */}
+      <TradingUploadSection
+        onUploadSuccess={(result) => {
+          console.log('Trading data uploaded:', result);
+
+          // Store uploaded transactions for display
+          if (result.transactions && result.transactions.length > 0) {
+            setTradingTransactions(prev => [...prev, ...result.transactions]);
+          }
+
+          // Update portfolio with uploaded data
+          if (result.portfolioUpdates && result.portfolioUpdates.length > 0) {
+            const updatedPortfolio = result.portfolioUpdates.map(update => ({
+              id: Date.now() + Math.random(),
+              symbol: update.symbol,
+              name: `${update.symbol} Corporation`,
+              quantity: update.totalQuantity,
+              avgPrice: update.avgPrice,
+              currentPrice: update.avgPrice, // Use avg price as current for now
+              totalValue: update.totalQuantity * update.avgPrice,
+              pnl: 0,
+              pnlPercent: 0
+            }));
+
+            // Merge with existing portfolio
+            setPortfolio(prev => {
+              const merged = [...prev];
+              updatedPortfolio.forEach(newPos => {
+                const existingIndex = merged.findIndex(p => p.symbol === newPos.symbol);
+                if (existingIndex >= 0) {
+                  merged[existingIndex] = newPos;
+                } else {
+                  merged.push(newPos);
+                }
+              });
+              return merged;
+            });
+          }
+        }}
+      />
+
       {/* Portfolio Summary Cards */}
       <div className={styles.portfolioSummary}>
         <div className={styles.summaryCard}>
@@ -325,6 +368,53 @@ export default function Trading() {
             )}
           </div>
         </div>
+
+        {/* Trading Transactions Table */}
+        {tradingTransactions.length > 0 && (
+          <div className={styles.section}>
+            <h2>Trading Transactions</h2>
+            <div className={styles.transactionsTable}>
+              <table className={styles.table}>
+                <thead>
+                  <tr>
+                    <th>Exchange</th>
+                    <th>Trade Date</th>
+                    <th>Trade Time</th>
+                    <th>ISIN</th>
+                    <th>Issuer Details</th>
+                    <th>Maturity</th>
+                    <th>Amount</th>
+                    <th>Price</th>
+                    <th>Yield</th>
+                    <th>Status</th>
+                    <th>Deal Type</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {tradingTransactions.map((transaction, index) => (
+                    <tr key={transaction.transactionId || index}>
+                      <td>{transaction.exchange || '-'}</td>
+                      <td>{transaction.date || '-'}</td>
+                      <td>{transaction.tradeTime || '-'}</td>
+                      <td className={styles.isin}>{transaction.isin || '-'}</td>
+                      <td className={styles.issuer}>{transaction.issuerDetails || '-'}</td>
+                      <td>{transaction.maturity || '-'}</td>
+                      <td className={styles.amount}>{formatCurrency(transaction.amount || 0)}</td>
+                      <td className={styles.price}>{formatCurrency(transaction.price || 0)}</td>
+                      <td className={styles.yield}>{transaction.yield || '-'}</td>
+                      <td className={`${styles.status} ${transaction.status?.toLowerCase() === 'executed' ? styles.executed : styles.pending}`}>
+                        {transaction.status || '-'}
+                      </td>
+                      <td className={`${styles.dealType} ${transaction.type?.toLowerCase() === 'buy' ? styles.buy : styles.sell}`}>
+                        {transaction.dealType || transaction.type || '-'}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );
