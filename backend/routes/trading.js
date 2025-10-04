@@ -39,23 +39,30 @@ router.post('/upload', upload.single('file'), async (req, res) => {
     const fileExt = path.extname(fileName).toLowerCase();
 
     let rawData = [];
+    let exchangeType = 'UNKNOWN';
     let imported = 0;
     let duplicates = 0;
 
     // Parse based on file type
     if (fileExt === '.csv') {
-      rawData = await parseCSVData(fileBuffer);
+      const parseResult = await parseCSVData(fileBuffer);
+      rawData = parseResult.data;
+      exchangeType = parseResult.exchangeType;
     } else if (['.xlsx', '.xls'].includes(fileExt)) {
-      rawData = await parseExcelData(fileBuffer);
+      const parseResult = await parseExcelData(fileBuffer);
+      rawData = parseResult.data;
+      exchangeType = parseResult.exchangeType;
     } else {
       throw new Error('Unsupported file type');
     }
+
+    console.log(`Detected exchange type: ${exchangeType}`);
 
     // Validate and transform data
     const results = [];
     for (let i = 0; i < rawData.length; i++) {
       const row = rawData[i];
-      const transaction = transformRowToTransaction(row, i + 1);
+      const transaction = transformRowToUnifiedTransaction(row, i + 1, exchangeType);
 
       if (transaction) {
         results.push(transaction);
@@ -116,7 +123,8 @@ router.post('/upload', upload.single('file'), async (req, res) => {
       imported,
       duplicates,
       totalProcessed: results.length,
-      message: `Successfully imported ${imported} trades, ${duplicates} duplicates skipped`,
+      exchangeType,
+      message: `Successfully imported ${imported} trades from ${exchangeType}, ${duplicates} duplicates skipped`,
       portfolioUpdates: Object.values(portfolioUpdates),
       transactions: results // Include transactions for display
     });
@@ -130,7 +138,7 @@ router.post('/upload', upload.single('file'), async (req, res) => {
   }
 });
 
-// Parse CSV data from buffer
+// Parse CSV data from buffer and detect exchange type
 async function parseCSVData(buffer) {
   return new Promise((resolve, reject) => {
     const results = [];
@@ -139,45 +147,169 @@ async function parseCSVData(buffer) {
     // Simple CSV parser for trading data format
     const lines = csvData.split('\n').filter(line => line.trim());
 
-    // Skip header row if present (check for common headers)
-    let startIndex = 0;
-    const firstLine = lines[0].toLowerCase();
-    const headerPatterns = ['exchange', 'trade date', 'trade time', 'isin', 'issuer', 'maturity', 'amount', 'price', 'yield', 'status', 'deal type'];
-
-    if (headerPatterns.some(pattern => firstLine.includes(pattern))) {
-      startIndex = 1; // Skip header
+    if (lines.length === 0) {
+      resolve({ data: [], exchangeType: 'UNKNOWN' });
+      return;
     }
+
+    // Detect exchange type from header
+    const firstLine = lines[0].toLowerCase();
+    let exchangeType = 'UNKNOWN';
+    let startIndex = 0;
+
+    // Enhanced BSE Detection Patterns (more comprehensive)
+    const bsePatterns = [
+      'sr no', 's.no', 'serial', 'no', 'number', 'sl no', 'srl no',
+      'symbol', 'scrip', 'security', 'security code',
+      'issuer name', 'issuer', 'company', 'name', 'company name',
+      'coupon', 'rate', '%', 'coupon rate', 'interest rate',
+      'maturity', 'maturity date', 'mat date',
+      'deal date', 'date', 'trade date', 'transaction date',
+      'settlement', 'settlement type', 'settlement mode',
+      'amount', 'trade amount', 'value', 'amount (rs)', 'face value',
+      'price', 'trade price', 'rate', 'price (rs)',
+      'yield', 'traded yield', 'yield (%)', 'ytm',
+      'time', 'trade time', 'transaction time',
+      'order', 'order type', 'type', 'buy/sell'
+    ];
+
+    // Enhanced NSE Detection Patterns
+    const nsePatterns = [
+      'seller deal type', 'seller', 'seller type', 'seller deal',
+      'buyer deal type', 'buyer', 'buyer type', 'buyer deal',
+      'description', 'security description', 'security name', 'instrument',
+      'deal size', 'size', 'quantity', 'qty', 'volume',
+      'settlement status', 'status', 'settled', 'settlement',
+      'settlement date', 'settle date', 'settlement dt'
+    ];
+
+    const bseScore = bsePatterns.reduce((score, pattern) => score + (firstLine.includes(pattern) ? 1 : 0), 0);
+    const nseScore = nsePatterns.reduce((score, pattern) => score + (firstLine.includes(pattern) ? 1 : 0), 0);
+
+    // Determine exchange type with improved logic
+    if (bseScore >= 2) { // Lower threshold for BSE
+      exchangeType = 'BSE';
+      if (bsePatterns.some(pattern => firstLine.includes(pattern))) {
+        startIndex = 1;
+      }
+    } else if (nseScore >= 1) { // Lower threshold for NSE
+      exchangeType = 'NSE';
+      if (nsePatterns.some(pattern => firstLine.includes(pattern))) {
+        startIndex = 1;
+      }
+    } else {
+      // Default to BSE if unclear, but log for debugging
+      exchangeType = 'BSE';
+      console.log(`Unclear exchange type for CSV, defaulting to BSE`);
+      console.log(`Available patterns found: BSE=${bseScore}, NSE=${nseScore}`);
+    }
+
+    console.log(`CSV Exchange detection - BSE score: ${bseScore}, NSE score: ${nseScore}, Type: ${exchangeType}`);
 
     for (let i = startIndex; i < lines.length; i++) {
       const line = lines[i].trim();
       if (!line) continue;
 
       const columns = parseCSVLine(line);
-      if (columns.length >= 11) {
-        results.push({
-          exchange: columns[0]?.trim() || '',
-          tradeDate: columns[1]?.trim() || '',
-          tradeTime: columns[2]?.trim() || '',
-          isin: columns[3]?.trim() || '',
-          issuerDetails: columns[4]?.trim() || '',
-          maturity: columns[5]?.trim() || '',
-          amount: columns[6]?.trim() || '',
-          price: columns[7]?.trim() || '',
-          yield: columns[8]?.trim() || '',
-          status: columns[9]?.trim() || '',
-          dealType: columns[10]?.trim() || ''
+
+      if (exchangeType === 'BSE') {
+        // BSE format - flexible column mapping
+        const bseData = {};
+
+        // Map columns based on header patterns
+        const headers = lines[0].toLowerCase().split(',');
+        headers.forEach((header, index) => {
+          const lowerHeader = header.toLowerCase();
+
+          if (lowerHeader.includes('sr no') || lowerHeader.includes('s.no') || lowerHeader.includes('serial') || lowerHeader.includes('no')) {
+            bseData.serialNo = columns[index]?.trim() || '';
+          } else if (lowerHeader.includes('isin')) {
+            bseData.isin = columns[index]?.trim() || '';
+          } else if (lowerHeader.includes('symbol') || lowerHeader.includes('scrip')) {
+            bseData.symbol = columns[index]?.trim() || '';
+          } else if (lowerHeader.includes('issuer') || lowerHeader.includes('company') || lowerHeader.includes('name')) {
+            bseData.issuerName = columns[index]?.trim() || '';
+          } else if (lowerHeader.includes('coupon') || lowerHeader.includes('%') || lowerHeader.includes('rate')) {
+            bseData.coupon = columns[index]?.trim() || '';
+          } else if (lowerHeader.includes('maturity')) {
+            bseData.maturityDate = columns[index]?.trim() || '';
+          } else if (lowerHeader.includes('deal date') || lowerHeader.includes('date') || lowerHeader.includes('trade date')) {
+            bseData.dealDate = columns[index]?.trim() || '';
+          } else if (lowerHeader.includes('settlement')) {
+            bseData.settlementType = columns[index]?.trim() || '';
+          } else if (lowerHeader.includes('amount') || lowerHeader.includes('value') || lowerHeader.includes('trade amount')) {
+            bseData.tradeAmount = columns[index]?.trim() || '';
+          } else if (lowerHeader.includes('price') || lowerHeader.includes('trade price')) {
+            bseData.tradePrice = columns[index]?.trim() || '';
+          } else if (lowerHeader.includes('yield') || lowerHeader.includes('traded yield')) {
+            bseData.yield = columns[index]?.trim() || '';
+          } else if (lowerHeader.includes('time') || lowerHeader.includes('trade time')) {
+            bseData.tradeTime = columns[index]?.trim() || '';
+          } else if (lowerHeader.includes('order') || lowerHeader.includes('type')) {
+            bseData.orderType = columns[index]?.trim() || '';
+          }
         });
+
+        // Only add if we have minimum required fields
+        if (bseData.isin && (bseData.symbol || bseData.issuerName)) {
+          results.push(bseData);
+        } else {
+          console.log(`Skipping BSE CSV row ${i + 1}: Missing required fields (ISIN and Symbol/Issuer)`);
+        }
+      } else if (exchangeType === 'NSE') {
+        // NSE format - flexible column mapping
+        const nseData = {};
+
+        // Map columns based on header patterns
+        const headers = lines[0].toLowerCase().split(',');
+        headers.forEach((header, index) => {
+          const lowerHeader = header.toLowerCase();
+
+          if (lowerHeader.includes('date') || lowerHeader.includes('trade date')) {
+            nseData.date = columns[index]?.trim() || '';
+          } else if (lowerHeader.includes('seller') && lowerHeader.includes('deal')) {
+            nseData.sellerDealType = columns[index]?.trim() || '';
+          } else if (lowerHeader.includes('buyer') && lowerHeader.includes('deal')) {
+            nseData.buyerDealType = columns[index]?.trim() || '';
+          } else if (lowerHeader.includes('isin')) {
+            nseData.isin = columns[index]?.trim() || '';
+          } else if (lowerHeader.includes('description') || lowerHeader.includes('security') || lowerHeader.includes('name')) {
+            nseData.description = columns[index]?.trim() || '';
+          } else if (lowerHeader.includes('price') || lowerHeader.includes('rate')) {
+            nseData.price = columns[index]?.trim() || '';
+          } else if (lowerHeader.includes('deal size') || lowerHeader.includes('size') || lowerHeader.includes('quantity') || lowerHeader.includes('qty')) {
+            nseData.dealSize = columns[index]?.trim() || '';
+          } else if (lowerHeader.includes('settlement status') || lowerHeader.includes('status')) {
+            nseData.settlementStatus = columns[index]?.trim() || '';
+          } else if (lowerHeader.includes('yield')) {
+            nseData.yield = columns[index]?.trim() || '';
+          } else if (lowerHeader.includes('time') || lowerHeader.includes('trade time')) {
+            nseData.tradeTime = columns[index]?.trim() || '';
+          } else if (lowerHeader.includes('settlement date') || lowerHeader.includes('settle date')) {
+            nseData.settlementDate = columns[index]?.trim() || '';
+          } else if (lowerHeader.includes('maturity')) {
+            nseData.maturityDate = columns[index]?.trim() || '';
+          }
+        });
+
+        // Only add if we have minimum required fields
+        if (nseData.isin && nseData.description) {
+          results.push(nseData);
+        } else {
+          console.log(`Skipping NSE CSV row ${i + 1}: Missing required fields (ISIN and Description)`);
+        }
       }
     }
 
-    resolve(results);
+    resolve({ data: results, exchangeType });
   });
 }
 
-// Parse Excel data from buffer
+// Parse Excel data from buffer and detect exchange type
 async function parseExcelData(buffer) {
   const workbook = XLSX.read(buffer, { type: 'buffer' });
   const results = [];
+  let exchangeType = 'UNKNOWN';
 
   // Process all sheets
   for (const sheetName of workbook.SheetNames) {
@@ -186,109 +318,279 @@ async function parseExcelData(buffer) {
 
     if (jsonData.length === 0) continue;
 
-    // Skip header row if present
-    let startIndex = 0;
+    // Detect exchange type from first row
     const firstRow = jsonData[0].map(cell => String(cell || '').toLowerCase());
-    const headerPatterns = ['exchange', 'trade date', 'trade time', 'isin', 'issuer', 'maturity', 'amount', 'price', 'yield', 'status', 'deal type'];
+    let startIndex = 0;
 
-    if (headerPatterns.some(pattern => firstRow.some(cell => cell.includes(pattern)))) {
-      startIndex = 1; // Skip header
+    // Enhanced BSE Detection Patterns (more flexible)
+    const bsePatterns = [
+      'sr no', 's.no', 'serial', 'no', 'number',
+      'symbol', 'scrip', 'security',
+      'issuer name', 'issuer', 'company', 'name',
+      'coupon', 'rate', '%',
+      'maturity', 'maturity date',
+      'deal date', 'date', 'trade date',
+      'settlement', 'settlement type',
+      'amount', 'trade amount', 'value',
+      'price', 'trade price', 'rate',
+      'yield', 'traded yield',
+      'time', 'trade time',
+      'order', 'order type', 'type'
+    ];
+
+    // Enhanced NSE Detection Patterns
+    const nsePatterns = [
+      'seller deal type', 'seller', 'seller type',
+      'buyer deal type', 'buyer', 'buyer type',
+      'description', 'security description', 'security name',
+      'deal size', 'size', 'quantity', 'qty',
+      'settlement status', 'status', 'settled',
+      'settlement date', 'settle date'
+    ];
+
+    const bseScore = bsePatterns.reduce((score, pattern) => score + (firstRow.some(cell => cell.includes(pattern)) ? 1 : 0), 0);
+    const nseScore = nsePatterns.reduce((score, pattern) => score + (firstRow.some(cell => cell.includes(pattern)) ? 1 : 0), 0);
+
+    // Determine exchange type with fallback logic
+    if (bseScore >= 3) { // Require at least 3 BSE patterns
+      exchangeType = 'BSE';
+      if (bsePatterns.some(pattern => firstRow.some(cell => cell.includes(pattern)))) {
+        startIndex = 1;
+      }
+    } else if (nseScore >= 2) { // Require at least 2 NSE patterns
+      exchangeType = 'NSE';
+      if (nsePatterns.some(pattern => firstRow.some(cell => cell.includes(pattern)))) {
+        startIndex = 1;
+      }
+    } else {
+      // Default to BSE if unclear
+      exchangeType = 'BSE';
+      console.log(`Unclear exchange type for sheet "${sheetName}", defaulting to BSE`);
     }
+
+    console.log(`Excel Sheet "${sheetName}" - BSE score: ${bseScore}, NSE score: ${nseScore}, Type: ${exchangeType}`);
+    console.log(`First row cells:`, firstRow);
 
     for (let i = startIndex; i < jsonData.length; i++) {
       const row = jsonData[i];
-      if (row && row.length >= 11) {
-        results.push({
-          exchange: String(row[0] || '').trim(),
-          tradeDate: String(row[1] || '').trim(),
-          tradeTime: String(row[2] || '').trim(),
-          isin: String(row[3] || '').trim(),
-          issuerDetails: String(row[4] || '').trim(),
-          maturity: String(row[5] || '').trim(),
-          amount: String(row[6] || '').trim(),
-          price: String(row[7] || '').trim(),
-          yield: String(row[8] || '').trim(),
-          status: String(row[9] || '').trim(),
-          dealType: String(row[10] || '').trim()
+      if (!row || row.length === 0) continue;
+
+      if (exchangeType === 'BSE') {
+        // BSE format - flexible column mapping
+        const bseData = {};
+
+        // Map columns based on header patterns (more flexible approach)
+        firstRow.forEach((header, index) => {
+          const lowerHeader = header.toLowerCase();
+
+          if (lowerHeader.includes('sr no') || lowerHeader.includes('s.no') || lowerHeader.includes('serial') || lowerHeader.includes('no')) {
+            bseData.serialNo = String(row[index] || '').trim();
+          } else if (lowerHeader.includes('isin')) {
+            bseData.isin = String(row[index] || '').trim();
+          } else if (lowerHeader.includes('symbol') || lowerHeader.includes('scrip')) {
+            bseData.symbol = String(row[index] || '').trim();
+          } else if (lowerHeader.includes('issuer') || lowerHeader.includes('company') || lowerHeader.includes('name')) {
+            bseData.issuerName = String(row[index] || '').trim();
+          } else if (lowerHeader.includes('coupon') || lowerHeader.includes('%') || lowerHeader.includes('rate')) {
+            bseData.coupon = String(row[index] || '').trim();
+          } else if (lowerHeader.includes('maturity')) {
+            bseData.maturityDate = String(row[index] || '').trim();
+          } else if (lowerHeader.includes('deal date') || lowerHeader.includes('date') || lowerHeader.includes('trade date')) {
+            bseData.dealDate = String(row[index] || '').trim();
+          } else if (lowerHeader.includes('settlement')) {
+            bseData.settlementType = String(row[index] || '').trim();
+          } else if (lowerHeader.includes('amount') || lowerHeader.includes('value') || lowerHeader.includes('trade amount')) {
+            bseData.tradeAmount = String(row[index] || '').trim();
+          } else if (lowerHeader.includes('price') || lowerHeader.includes('trade price')) {
+            bseData.tradePrice = String(row[index] || '').trim();
+          } else if (lowerHeader.includes('yield') || lowerHeader.includes('traded yield')) {
+            bseData.yield = String(row[index] || '').trim();
+          } else if (lowerHeader.includes('time') || lowerHeader.includes('trade time')) {
+            bseData.tradeTime = String(row[index] || '').trim();
+          } else if (lowerHeader.includes('order') || lowerHeader.includes('type')) {
+            bseData.orderType = String(row[index] || '').trim();
+          }
         });
+
+        // Only add if we have minimum required fields
+        if (bseData.isin && (bseData.symbol || bseData.issuerName)) {
+          results.push(bseData);
+        } else {
+          console.log(`Skipping BSE row ${i + 1}: Missing required fields (ISIN and Symbol/Issuer)`);
+        }
+      } else if (exchangeType === 'NSE') {
+        // NSE format - flexible column mapping
+        const nseData = {};
+
+        // Map columns based on header patterns
+        firstRow.forEach((header, index) => {
+          const lowerHeader = header.toLowerCase();
+
+          if (lowerHeader.includes('date') || lowerHeader.includes('trade date')) {
+            nseData.date = String(row[index] || '').trim();
+          } else if (lowerHeader.includes('seller') && lowerHeader.includes('deal')) {
+            nseData.sellerDealType = String(row[index] || '').trim();
+          } else if (lowerHeader.includes('buyer') && lowerHeader.includes('deal')) {
+            nseData.buyerDealType = String(row[index] || '').trim();
+          } else if (lowerHeader.includes('isin')) {
+            nseData.isin = String(row[index] || '').trim();
+          } else if (lowerHeader.includes('description') || lowerHeader.includes('security') || lowerHeader.includes('name')) {
+            nseData.description = String(row[index] || '').trim();
+          } else if (lowerHeader.includes('price') || lowerHeader.includes('rate')) {
+            nseData.price = String(row[index] || '').trim();
+          } else if (lowerHeader.includes('deal size') || lowerHeader.includes('size') || lowerHeader.includes('quantity') || lowerHeader.includes('qty')) {
+            nseData.dealSize = String(row[index] || '').trim();
+          } else if (lowerHeader.includes('settlement status') || lowerHeader.includes('status')) {
+            nseData.settlementStatus = String(row[index] || '').trim();
+          } else if (lowerHeader.includes('yield')) {
+            nseData.yield = String(row[index] || '').trim();
+          } else if (lowerHeader.includes('time') || lowerHeader.includes('trade time')) {
+            nseData.tradeTime = String(row[index] || '').trim();
+          } else if (lowerHeader.includes('settlement date') || lowerHeader.includes('settle date')) {
+            nseData.settlementDate = String(row[index] || '').trim();
+          } else if (lowerHeader.includes('maturity')) {
+            nseData.maturityDate = String(row[index] || '').trim();
+          }
+        });
+
+        // Only add if we have minimum required fields
+        if (nseData.isin && nseData.description) {
+          results.push(nseData);
+        } else {
+          console.log(`Skipping NSE row ${i + 1}: Missing required fields (ISIN and Description)`);
+        }
       }
     }
   }
 
-  return results;
+  return { data: results, exchangeType };
 }
 
-// Transform row data to transaction object
-function transformRowToTransaction(row, rowNumber) {
+// Transform row data to unified transaction object (16 columns)
+function transformRowToUnifiedTransaction(row, rowNumber, exchangeType) {
   try {
-    // Extract symbol from ISIN or issuer details
     let symbol = '';
-    if (row.isin && row.isin.length >= 12) {
-      // ISIN format: INE followed by 9 characters, last character is checksum
-      symbol = row.isin.substring(3, 12); // Extract the 9-character company code
-    } else if (row.issuerDetails) {
-      // Fallback: extract from issuer details (take first word or common patterns)
-      const issuer = row.issuerDetails.toUpperCase();
-      // Look for common stock symbols in issuer name
-      const words = issuer.split(/\s+/);
-      symbol = words.find(word => word.length >= 3 && word.length <= 10 && !word.includes('LTD') && !word.includes('CORP')) || words[0];
-    }
+    let tradeDate = '';
+    let tradeTime = '';
+    let isin = '';
+    let issuerName = '';
+    let coupon = '';
+    let maturityDate = '';
+    let settlementType = '';
+    let tradeAmount = '';
+    let tradePrice = '';
+    let yieldValue = '';
+    let orderType = '';
+    let settlementStatus = '';
+    let settlementDate = '';
 
-    if (!symbol) {
-      console.log(`Skipping row ${rowNumber}: No symbol found`);
+    if (exchangeType === 'BSE') {
+      // BSE format mapping
+      symbol = row.symbol || '';
+      isin = row.isin || '';
+      issuerName = row.issuerName || '';
+      coupon = row.coupon || '';
+      maturityDate = row.maturityDate || '';
+      tradeDate = row.dealDate || '';
+      settlementType = row.settlementType || '';
+      tradeAmount = row.tradeAmount || '';
+      tradePrice = row.tradePrice || '';
+      yieldValue = row.yield || '';
+      tradeTime = row.tradeTime || '';
+      orderType = row.orderType || '';
+
+      // For BSE, use provided serial number or calculate
+      const serialNo = row.serialNo || rowNumber.toString();
+
+      return {
+        exchange: 'BSE',
+        serialNo,
+        isin,
+        symbol,
+        issuerName,
+        coupon,
+        maturityDate,
+        tradeDate,
+        settlementType,
+        tradeAmount,
+        tradePrice,
+        yield: yieldValue,
+        tradeTime,
+        orderType,
+        settlementStatus: '-',
+        settlementDate: '-',
+        transactionId: `${symbol}_${tradeDate}_${orderType}_${tradeAmount}_${tradePrice}`
+      };
+
+    } else if (exchangeType === 'NSE') {
+      // NSE format mapping
+      isin = row.isin || '';
+      issuerName = row.description || '';
+
+      // Extract symbol from description for NSE
+      if (issuerName) {
+        // Look for patterns like "Company Name 7.25% 2025"
+        const match = issuerName.match(/^(.+?)\s+\d+\.\d+%\s+\d{4}/);
+        if (match) {
+          const companyPart = match[1];
+          // Extract symbol from company name
+          const words = companyPart.split(/\s+/);
+          symbol = words.find(word => word.length >= 3 && word.length <= 10 && !word.includes('LTD') && !word.includes('CORP')) || words[0] || '';
+        } else {
+          // Fallback: take first significant word
+          const words = issuerName.split(/\s+/);
+          symbol = words.find(word => word.length >= 3 && word.length <= 10) || words[0] || '';
+        }
+      }
+
+      maturityDate = row.maturityDate || '';
+      tradeDate = row.date || '';
+      tradeAmount = row.dealSize || '';
+      tradePrice = row.price || '';
+      yieldValue = row.yield || '';
+      tradeTime = row.tradeTime || '';
+      settlementStatus = row.settlementStatus || '';
+      settlementDate = row.settlementDate || '';
+
+      // Determine order type from deal types
+      const sellerDealType = row.sellerDealType?.toUpperCase() || '';
+      const buyerDealType = row.buyerDealType?.toUpperCase() || '';
+
+      if (buyerDealType.includes('BUY') || sellerDealType.includes('SELL')) {
+        orderType = 'BUY';
+      } else if (sellerDealType.includes('BUY') || buyerDealType.includes('SELL')) {
+        orderType = 'SELL';
+      } else {
+        orderType = 'BUY'; // Default
+      }
+
+      // Settlement type from deal types
+      settlementType = `${sellerDealType}-${buyerDealType}`;
+
+      return {
+        exchange: 'NSE',
+        serialNo: rowNumber.toString(), // Calculated for NSE
+        isin,
+        symbol,
+        issuerName,
+        coupon: '-', // Not available in NSE format
+        maturityDate,
+        tradeDate,
+        settlementType,
+        tradeAmount,
+        tradePrice,
+        yield: yieldValue,
+        tradeTime,
+        orderType,
+        settlementStatus,
+        settlementDate,
+        transactionId: `${symbol}_${tradeDate}_${orderType}_${tradeAmount}_${tradePrice}`
+      };
+
+    } else {
+      console.log(`Skipping row ${rowNumber}: Unknown exchange type ${exchangeType}`);
       return null;
     }
-
-    // Parse amount (could be quantity or amount)
-    const amountStr = row.amount.replace(/,/g, '');
-    const amount = parseFloat(amountStr);
-
-    if (isNaN(amount) || amount <= 0) {
-      console.log(`Skipping row ${rowNumber}: Invalid amount`);
-      return null;
-    }
-
-    // Parse price
-    const priceStr = row.price.replace(/,/g, '');
-    const price = parseFloat(priceStr);
-
-    if (isNaN(price) || price <= 0) {
-      console.log(`Skipping row ${rowNumber}: Invalid price`);
-      return null;
-    }
-
-    // Determine transaction type from deal type or status
-    let type = 'BUY'; // Default
-    const dealType = row.dealType?.toUpperCase() || '';
-    const status = row.status?.toUpperCase() || '';
-
-    if (dealType.includes('SELL') || status.includes('SELL')) {
-      type = 'SELL';
-    } else if (dealType.includes('BUY') || status.includes('BUY')) {
-      type = 'BUY';
-    }
-
-    // Parse date
-    const tradeDate = row.tradeDate || new Date().toISOString().split('T')[0];
-
-    // Create unique transaction ID
-    const transactionId = `${symbol}_${tradeDate}_${type}_${amount}_${price}`;
-
-    return {
-      date: tradeDate,
-      symbol: symbol.trim(),
-      type,
-      quantity: Math.floor(amount), // Use amount as quantity for now
-      price,
-      amount: amount,
-      isin: row.isin,
-      issuerDetails: row.issuerDetails,
-      maturity: row.maturity,
-      yield: row.yield,
-      status: row.status,
-      dealType: row.dealType,
-      transactionId
-    };
 
   } catch (error) {
     console.log(`Error processing row ${rowNumber}:`, error);

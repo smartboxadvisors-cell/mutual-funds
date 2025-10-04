@@ -279,28 +279,43 @@
 }
 
 .transactionsTable .table {
-  min-width: 1200px; /* Ensure table doesn't get too narrow */
+  min-width: 2000px; /* Increased for 16 columns */
 }
 
 .transactionsTable th,
 .transactionsTable td {
   white-space: nowrap;
   text-overflow: ellipsis;
-  max-width: 150px;
+  max-width: 120px; /* Reduced for more columns */
   overflow: hidden;
+  padding: 8px 4px; /* Reduced padding for more columns */
+}
+
+.transactionsTable .exchange {
+  font-weight: bold;
+  color: #3498db;
 }
 
 .transactionsTable .isin {
   font-family: monospace;
-  font-size: 0.85rem;
+  font-size: 0.8rem;
+}
+
+.transactionsTable .symbol {
+  font-weight: bold;
+  color: #2c3e50;
 }
 
 .transactionsTable .issuer {
-  max-width: 200px;
+  max-width: 150px;
 }
 
-.transactionsTable .amount,
-.transactionsTable .price {
+.transactionsTable .coupon {
+  text-align: center;
+}
+
+.transactionsTable .tradeAmount,
+.transactionsTable .tradePrice {
   text-align: right;
   font-family: monospace;
 }
@@ -309,40 +324,63 @@
   text-align: center;
 }
 
-.transactionsTable .status {
+.transactionsTable .settlementType {
+  max-width: 100px;
   text-align: center;
-  font-weight: 500;
-  padding: 4px 8px;
-  border-radius: 4px;
-  font-size: 0.8rem;
 }
 
-.transactionsTable .status.executed {
+.transactionsTable .orderType {
+  text-align: center;
+  font-weight: 500;
+  padding: 4px 6px;
+  border-radius: 4px;
+  font-size: 0.75rem;
+}
+
+.transactionsTable .orderType.buy {
   background: #d4edda;
   color: #155724;
 }
 
-.transactionsTable .status.pending {
+.transactionsTable .orderType.sell {
+  background: #f8d7da;
+  color: #721c24;
+}
+
+.transactionsTable .settlementStatus {
+  text-align: center;
+  font-weight: 500;
+  padding: 4px 6px;
+  border-radius: 4px;
+  font-size: 0.75rem;
+}
+
+.transactionsTable .settlementStatus.settled {
+  background: #d4edda;
+  color: #155724;
+}
+
+.transactionsTable .settlementStatus.pending {
   background: #fff3cd;
   color: #856404;
 }
 
-.transactionsTable .dealType {
-  text-align: center;
+/* Pagination Styles */
+.paginationWrapper {
+  margin-top: 20px;
+  padding-top: 20px;
+  border-top: 1px solid #ecf0f1;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 20px;
+}
+
+.paginationInfo {
+  color: #7f8c8d;
+  font-size: 0.9rem;
   font-weight: 500;
-  padding: 4px 8px;
-  border-radius: 4px;
-  font-size: 0.8rem;
-}
-
-.transactionsTable .dealType.buy {
-  background: #d4edda;
-  color: #155724;
-}
-
-.transactionsTable .dealType.sell {
-  background: #f8d7da;
-  color: #721c24;
 }
 
 /* Responsive Design */
@@ -385,12 +423,14 @@
   }
 
   .transactionsTable .table {
-    min-width: 1000px;
+    min-width: 1600px;
   }
 
   .transactionsTable th,
   .transactionsTable td {
-    max-width: 120px;
+    max-width: 100px;
+    padding: 6px 2px;
+    font-size: 0.85rem;
   }
 }
 
@@ -412,13 +452,24 @@
   }
 
   .transactionsTable .table {
-    min-width: 800px;
-    font-size: 0.8rem;
+    min-width: 1400px;
+    font-size: 0.75rem;
   }
 
   .transactionsTable th,
   .transactionsTable td {
-    max-width: 100px;
-    padding: 6px;
+    max-width: 80px;
+    padding: 4px 2px;
+  }
+
+  .paginationWrapper {
+    flex-direction: column;
+    align-items: center;
+    text-align: center;
+    gap: 15px;
+  }
+
+  .paginationInfo {
+    font-size: 0.8rem;
   }
 }

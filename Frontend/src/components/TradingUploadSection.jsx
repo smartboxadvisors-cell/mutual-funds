@@ -293,20 +293,20 @@ export default function TradingUploadSection({ onUploadSuccess }) {
 
         {/* Help Text */}
         <div className={styles.helpText}>
-          <p>💡 <strong>Supported Format:</strong></p>
+          <p>💡 <strong>Supported Formats (Auto-detected):</strong></p>
           <ul>
-            <li>✅ Exchange, Trade Date, Trade Time, ISIN, Issuer details, Maturity, Amount, Price, Yield, Status, Deal Type</li>
+            <li>✅ <strong>BSE Format:</strong> Flexible column detection for BSE trading files</li>
+            <li>✅ <strong>NSE Format:</strong> Flexible column detection for NSE trading files</li>
             <li>✅ Upload multiple CSV or Excel files at once</li>
             <li>✅ Select an entire folder containing files</li>
             <li>✅ Drag & drop files from your file explorer</li>
+            <li>✅ Smart exchange detection and flexible column mapping</li>
             <li>✅ Duplicates are automatically detected and skipped</li>
           </ul>
-          <p><strong>Example CSV:</strong></p>
-          <code className={styles.codeExample}>
-            Exchange,Trade Date,Trade Time,ISIN,Issuer details,Maturity,Amount,Price,Yield,Status,Deal Type<br/>
-            NSE,2024-01-15,09:30:00,INE002A01018,Reliance Industries Ltd,2025-03-15,1000000,2450.50,7.25,Executed,BUY<br/>
-            BSE,2024-01-16,10:15:00,INE467B01029,TCS Ltd,2024-12-20,500000,3200.00,6.80,Executed,BUY
-          </code>
+          <p><strong>Flexible Detection:</strong></p>
+          <p>The system automatically detects whether your file is from BSE or NSE and maps columns accordingly, regardless of the exact column names or order.</p>
+          <p><strong>Common BSE Columns:</strong> Sr No, ISIN, Symbol, Issuer Name, Coupon, Maturity Date, Deal Date, Settlement Type, Trade Amount, Trade Price, Yield, Trade Time, Order Type</p>
+          <p><strong>Common NSE Columns:</strong> Date, Seller/Buyer Deal Type, ISIN, Description, Price, Deal size, Settlement status, Yield, Trade Time, Settlement Date, Maturity Date</p>
         </div>
       </div>
     </div>

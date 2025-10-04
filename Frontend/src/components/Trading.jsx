@@ -1,6 +1,7 @@
 // src/components/Trading.jsx
-import { useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import TradingUploadSection from './TradingUploadSection';
+import Pagination from './Pagination';
 import styles from '../styles/trading.module.css';
 
 export default function Trading() {
@@ -10,6 +11,10 @@ export default function Trading() {
   const [price, setPrice] = useState('');
   const [isBuy, setIsBuy] = useState(true);
   const [tradingTransactions, setTradingTransactions] = useState([]);
+
+  // Pagination state
+  const [currentPage, setCurrentPage] = useState(1);
+  const [itemsPerPage] = useState(50); // Show 50 transactions per page
 
   // Sample trading data - in a real app, this would come from an API
   const [portfolio, setPortfolio] = useState([
@@ -139,6 +144,19 @@ export default function Trading() {
     return new Intl.NumberFormat('en-IN').format(num);
   };
 
+  // Pagination logic
+  const totalPages = Math.ceil(tradingTransactions.length / itemsPerPage);
+  const startIndex = (currentPage - 1) * itemsPerPage;
+  const endIndex = startIndex + itemsPerPage;
+  const currentTransactions = tradingTransactions.slice(startIndex, endIndex);
+
+  // Reset to page 1 when transactions change
+  useEffect(() => {
+    if (currentPage > totalPages && totalPages > 0) {
+      setCurrentPage(1);
+    }
+  }, [tradingTransactions.length, totalPages, currentPage]);
+
   return (
     <div className={styles.container}>
       {/* Trading Data Upload */}
@@ -182,240 +200,77 @@ export default function Trading() {
         }}
       />
 
-      {/* Portfolio Summary Cards */}
-      <div className={styles.portfolioSummary}>
-        <div className={styles.summaryCard}>
-          <h3>Total Portfolio Value</h3>
-          <p className={styles.value}>
-            {formatCurrency(portfolio.reduce((sum, pos) => sum + pos.totalValue, 0))}
-          </p>
-        </div>
-        <div className={styles.summaryCard}>
-          <h3>Total P&L</h3>
-          <p className={`${styles.value} ${portfolio.reduce((sum, pos) => sum + pos.pnl, 0) >= 0 ? styles.positive : styles.negative}`}>
-            {formatCurrency(portfolio.reduce((sum, pos) => sum + pos.pnl, 0))}
-          </p>
-        </div>
-        <div className={styles.summaryCard}>
-          <h3>Total Positions</h3>
-          <p className={styles.value}>{portfolio.length}</p>
-        </div>
-      </div>
-
-      <div className={styles.content}>
-        {/* Market Watch */}
+      {/* Trading Transactions Table */}
+      {tradingTransactions.length > 0 && (
         <div className={styles.section}>
-          <h2>Market Watch</h2>
-          <div className={styles.watchlistControls}>
-            <select
-              value={selectedSymbol}
-              onChange={(e) => setSelectedSymbol(e.target.value)}
-              className={styles.symbolSelect}
-            >
-              <option value="">Select Symbol</option>
-              {Object.keys(marketData).map(symbol => (
-                <option key={symbol} value={symbol}>{symbol}</option>
-              ))}
-            </select>
-            <button onClick={handleAddToWatchlist} className={styles.btn}>
-              Add to Watchlist
-            </button>
-          </div>
-
-          <div className={styles.marketData}>
-            <div className={styles.marketGrid}>
-              {watchlist.length > 0 ? watchlist.map(symbol => {
-                const data = marketData[symbol];
-                if (!data) return null;
-
-                return (
-                  <div key={symbol} className={styles.marketCard}>
-                    <div className={styles.cardHeader}>
-                      <h3>{symbol}</h3>
-                      <button
-                        onClick={() => handleRemoveFromWatchlist(symbol)}
-                        className={styles.removeBtn}
-                      >
-                        ×
-                      </button>
-                    </div>
-                    <div className={styles.cardContent}>
-                      <p className={styles.price}>{formatCurrency(data.price)}</p>
-                      <p className={`${styles.change} ${data.change >= 0 ? styles.positive : styles.negative}`}>
-                        {data.change >= 0 ? '+' : ''}{data.change}%
-                      </p>
-                      <p className={styles.volume}>Vol: {formatNumber(data.volume)}</p>
-                    </div>
-                  </div>
-                );
-              }) : (
-                <p className={styles.empty}>No symbols in watchlist. Add some symbols to track.</p>
-              )}
-            </div>
-          </div>
-        </div>
-
-        {/* Trading Panel */}
-        <div className={styles.section}>
-          <h2>Quick Trade</h2>
-          <div className={styles.tradingPanel}>
-            <div className={styles.tradeType}>
-              <button
-                className={`${styles.tradeBtn} ${isBuy ? styles.active : ''}`}
-                onClick={() => setIsBuy(true)}
-              >
-                Buy
-              </button>
-              <button
-                className={`${styles.tradeBtn} ${!isBuy ? styles.active : ''}`}
-                onClick={() => setIsBuy(false)}
-              >
-                Sell
-              </button>
-            </div>
-
-            <div className={styles.tradeForm}>
-              <div className={styles.formGroup}>
-                <label>Symbol</label>
-                <select className={styles.input}>
-                  <option value="">Select Symbol</option>
-                  {Object.keys(marketData).map(symbol => (
-                    <option key={symbol} value={symbol}>{symbol}</option>
-                  ))}
-                </select>
-              </div>
-
-              <div className={styles.formGroup}>
-                <label>Quantity</label>
-                <input
-                  type="number"
-                  value={quantity}
-                  onChange={(e) => setQuantity(e.target.value)}
-                  className={styles.input}
-                  placeholder="Enter quantity"
-                />
-              </div>
-
-              <div className={styles.formGroup}>
-                <label>Price</label>
-                <input
-                  type="number"
-                  step="0.01"
-                  value={price}
-                  onChange={(e) => setPrice(e.target.value)}
-                  className={styles.input}
-                  placeholder="Enter price"
-                />
-              </div>
-
-              <button
-                className={`${styles.btn} ${styles.tradeBtn}`}
-                onClick={() => {
-                  const symbol = 'RELIANCE'; // In a real app, get from form
-                  handleTrade(isBuy ? 'buy' : 'sell', symbol, quantity, price);
-                }}
-              >
-                {isBuy ? 'Buy' : 'Sell'} Order
-              </button>
-            </div>
-          </div>
-        </div>
-
-        {/* Portfolio Positions */}
-        <div className={styles.section}>
-          <h2>Portfolio Positions</h2>
-          <div className={styles.portfolioTable}>
+          <h2>Trading Transactions</h2>
+          <div className={styles.transactionsTable}>
             <table className={styles.table}>
               <thead>
                 <tr>
+                  <th>Exchange</th>
+                  <th>Sr No</th>
+                  <th>ISIN</th>
                   <th>Symbol</th>
-                  <th>Name</th>
-                  <th>Quantity</th>
-                  <th>Avg Price</th>
-                  <th>Current Price</th>
-                  <th>Total Value</th>
-                  <th>P&L</th>
-                  <th>P&L %</th>
-                  <th>Actions</th>
+                  <th>Issuer Name</th>
+                  <th>Coupon %</th>
+                  <th>Maturity Date</th>
+                  <th>Trade Date</th>
+                  <th>Settlement Type</th>
+                  <th>Trade Amount</th>
+                  <th>Trade Price</th>
+                  <th>Yield %</th>
+                  <th>Trade Time</th>
+                  <th>Order Type</th>
+                  <th>Settlement Status</th>
+                  <th>Settlement Date</th>
                 </tr>
               </thead>
               <tbody>
-                {portfolio.map(position => (
-                  <tr key={position.id}>
-                    <td className={styles.symbol}>{position.symbol}</td>
-                    <td>{position.name}</td>
-                    <td>{formatNumber(position.quantity)}</td>
-                    <td>{formatCurrency(position.avgPrice)}</td>
-                    <td>{formatCurrency(position.currentPrice)}</td>
-                    <td>{formatCurrency(position.totalValue)}</td>
-                    <td className={`${position.pnl >= 0 ? styles.positive : styles.negative}`}>
-                      {formatCurrency(position.pnl)}
+                {currentTransactions.map((transaction, index) => (
+                  <tr key={transaction.transactionId || index}>
+                    <td className={styles.exchange}>{transaction.exchange || '-'}</td>
+                    <td>{transaction.serialNo || '-'}</td>
+                    <td className={styles.isin}>{transaction.isin || '-'}</td>
+                    <td className={styles.symbol}>{transaction.symbol || '-'}</td>
+                    <td className={styles.issuer}>{transaction.issuerName || '-'}</td>
+                    <td className={styles.coupon}>{transaction.coupon || '-'}</td>
+                    <td>{transaction.maturityDate || '-'}</td>
+                    <td>{transaction.tradeDate || '-'}</td>
+                    <td className={styles.settlementType}>{transaction.settlementType || '-'}</td>
+                    <td className={styles.tradeAmount}>{formatCurrency(transaction.tradeAmount || 0)}</td>
+                    <td className={styles.tradePrice}>{formatCurrency(transaction.tradePrice || 0)}</td>
+                    <td className={styles.yield}>{transaction.yield || '-'}</td>
+                    <td>{transaction.tradeTime || '-'}</td>
+                    <td className={`${styles.orderType} ${transaction.orderType?.toLowerCase() === 'buy' ? styles.buy : styles.sell}`}>
+                      {transaction.orderType || '-'}
                     </td>
-                    <td className={`${position.pnlPercent >= 0 ? styles.positive : styles.negative}`}>
-                      {position.pnlPercent >= 0 ? '+' : ''}{position.pnlPercent.toFixed(2)}%
+                    <td className={`${styles.settlementStatus} ${transaction.settlementStatus?.toLowerCase() === 'settled' ? styles.settled : styles.pending}`}>
+                      {transaction.settlementStatus || '-'}
                     </td>
-                    <td>
-                      <button className={`${styles.btn} ${styles.small}`}>
-                        Edit
-                      </button>
-                    </td>
+                    <td>{transaction.settlementDate || '-'}</td>
                   </tr>
                 ))}
               </tbody>
             </table>
-            {portfolio.length === 0 && (
-              <p className={styles.empty}>No positions yet. Start trading to see your portfolio here.</p>
-            )}
           </div>
-        </div>
 
-        {/* Trading Transactions Table */}
-        {tradingTransactions.length > 0 && (
-          <div className={styles.section}>
-            <h2>Trading Transactions</h2>
-            <div className={styles.transactionsTable}>
-              <table className={styles.table}>
-                <thead>
-                  <tr>
-                    <th>Exchange</th>
-                    <th>Trade Date</th>
-                    <th>Trade Time</th>
-                    <th>ISIN</th>
-                    <th>Issuer Details</th>
-                    <th>Maturity</th>
-                    <th>Amount</th>
-                    <th>Price</th>
-                    <th>Yield</th>
-                    <th>Status</th>
-                    <th>Deal Type</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {tradingTransactions.map((transaction, index) => (
-                    <tr key={transaction.transactionId || index}>
-                      <td>{transaction.exchange || '-'}</td>
-                      <td>{transaction.date || '-'}</td>
-                      <td>{transaction.tradeTime || '-'}</td>
-                      <td className={styles.isin}>{transaction.isin || '-'}</td>
-                      <td className={styles.issuer}>{transaction.issuerDetails || '-'}</td>
-                      <td>{transaction.maturity || '-'}</td>
-                      <td className={styles.amount}>{formatCurrency(transaction.amount || 0)}</td>
-                      <td className={styles.price}>{formatCurrency(transaction.price || 0)}</td>
-                      <td className={styles.yield}>{transaction.yield || '-'}</td>
-                      <td className={`${styles.status} ${transaction.status?.toLowerCase() === 'executed' ? styles.executed : styles.pending}`}>
-                        {transaction.status || '-'}
-                      </td>
-                      <td className={`${styles.dealType} ${transaction.type?.toLowerCase() === 'buy' ? styles.buy : styles.sell}`}>
-                        {transaction.dealType || transaction.type || '-'}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+          {/* Pagination */}
+          {totalPages > 1 && (
+            <div className={styles.paginationWrapper}>
+              <Pagination
+                page={currentPage}
+                setPage={setCurrentPage}
+                totalPages={totalPages}
+                disabled={false}
+              />
+              <div className={styles.paginationInfo}>
+                Showing {startIndex + 1}-{Math.min(endIndex, tradingTransactions.length)} of {tradingTransactions.length} transactions
+              </div>
             </div>
-          </div>
-        )}
-      </div>
+          )}
+        </div>
+      )}
     </div>
   );
 }
