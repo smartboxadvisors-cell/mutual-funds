@@ -136,6 +136,7 @@ const COLUMN_MAPPINGS = {
   instrumentName: [
     /name.*of.*the.*instrument/i, // "Name of the Instrument" (most specific first)
     /name.*of.*instrument/i,      // "Name of Instrument"
+    /company.*issuer.*instrument.*name/i, // "Company/Issuer/Instrument Name" (ICICI format)
     /name.*instrument/i,          // "Name Instrument"
     /name.*issuer/i,              // "Name of the Instrument / Issuer"
     /instrument.*name/i,          // "Instrument Name"
@@ -169,14 +170,18 @@ const COLUMN_MAPPINGS = {
     /market\s*\/\s*fair\s*value.*rs.*lacs/i,     // "Market/ Fair Value (Rs. in Lacs.)"
     /market\s*\/?\s*fair\s*value.*rs.*lacs/i,    // "Market/Fair Value ( Rs. in Lacs)" (HDFC format)
     /market\s*\/?\s*fair\s*value.*rs.*lakhs?/i,  // "Market/Fair Value (Rs. in Lakhs)"
+    /exposure.*market\s*value/i,                  // "Exposure/Market Value(Rs.Lakh)" (ICICI format)
     /market\s*value.*rs.*lakhs?/i,               // "Market value (Rs. in Lakhs)"
     /market\s*value.*rs.*lacs/i,                 // "Market value (Rs. in Lacs)"
+    /market\s*value.*rs.*lakh/i,                 // "Market value (Rs.Lakh)" (ICICI format)
     /fair\s*value.*rs.*lakhs?/i,                 // "Fair value (Rs. in Lakhs)"
     /value.*rs.*lakhs?/i,                         // "Value (Rs in Lakhs)"
     /value.*rs.*lacs/i,                           // "Value (Rs in Lacs)"
+    /value.*rs.*lakh/i,                           // "Value (Rs.Lakh)"
     /market.*value/i, 
     /fair.*value/i,
     /^value$/i,
+    /^exposure$/i,                                // "Exposure" alone (ICICI format)
     /amount/i
   ],
   navPercent: [
@@ -220,6 +225,8 @@ const COLUMN_MAPPINGS = {
   ytm: [
     /^ytm\s*%/i,               // "YTM %" (most specific first)
     /^ytm$/i,                  // "YTM" alone
+    /yield.*of.*the.*instrument/i,  // "Yield of the instrument" (ICICI format - most specific)
+    /yield.*instrument/i,      // "Yield instrument"
     /^yield$/i,                // "YIELD" or "Yield" alone (case-insensitive)
     /ytm/i,                    // "YTM" anywhere
     /^%\s*yield/i,             // "% Yield"
@@ -229,6 +236,7 @@ const COLUMN_MAPPINGS = {
   ytc: [
     /^~?ytc/i,                 // "~YTC" or "YTC"
     /yield.*to.*call/i,        // "Yield to Call"
+    /yield.*call/i,            // "Yield Call" (shorter variant)
     /^~?ytc.*at1/i,            // "~YTC (AT1/Tier 2 bonds)"
     /^~?ytc.*tier/i            // "~YTC (Tier 2)"
   ]
@@ -335,6 +343,7 @@ function isCategoryHeader(rowData) {
   // Categories can be in different columns depending on file format:
   // - NIMF format: categories in instrumentName column
   // - HDFC format: categories in isin column (column B)
+  // - ICICI format: categories in instrumentName with summary data in other columns
   // Check both fields to handle all formats
   const textFromInstrument = String(rowData.instrumentName || '').trim().toLowerCase();
   const textFromIsin = String(rowData.isin || '').trim().toLowerCase();
@@ -342,19 +351,22 @@ function isCategoryHeader(rowData) {
   // Try instrumentName first (most common), then isin
   const text = textFromInstrument || textFromIsin;
   
-  // Category headers should have text but few other fields
+  // Category headers should have text
   if (!text) return null;
   
-  // Must have few non-empty values to be a category header
-  // Filter out null/undefined values before counting
-  const nonEmptyCount = Object.values(rowData).filter(v => v !== null && v !== undefined && String(v).trim() !== '').length;
-  if (nonEmptyCount > 3) return null;
-  
+  // Check if text matches any category pattern FIRST
+  // This is the most reliable way to detect categories
   for (const mapping of CATEGORY_MAPPINGS) {
     if (mapping.patterns.some(p => p.test(text))) {
-      return mapping.name;
+      // Found a category match!
+      // Additional validation: should NOT have a valid ISIN (ISINs indicate data rows)
+      const hasValidISIN = rowData.isin && /^IN[A-Z0-9]{10}$/i.test(String(rowData.isin).trim());
+      if (!hasValidISIN) {
+        return mapping.name;
+      }
     }
   }
+  
   return null;
 }
 
@@ -595,19 +607,27 @@ function parseExcelFile(filePathOrBuffer) {
       const categoryName = isCategoryHeader(rowData);
       if (categoryName) {
         currentCategory = categoryName;
-        console.log(`📂 Found category: ${categoryName} at row ${r}`);
+        console.log(`📂 Found category: ${categoryName} at row ${r}`, 
+          `(had ${Object.values(rowData).filter(v => v !== null && v !== undefined && String(v).trim() !== '').length} non-empty fields)`);
         continue;
       }
       
       // Now check if irrelevant row (subcategories, metadata, etc.)
       if (isIrrelevantRow(rowData)) {
-        if (r <= headerRowIndex + 8) console.log(`❌ Skipping irrelevant row ${r}:`, rowData.instrumentName || '(no instrument name)');
+        if (r <= headerRowIndex + 15) {
+          console.log(`❌ Skipping irrelevant row ${r}:`, rowData.instrumentName || '(no instrument name)',
+            `| Current category: ${currentCategory || 'NONE'}`);
+        }
         continue;
       }
       
       // Check if row has valid data (not empty/null)
       if (!hasValidData(rowData)) {
-        if (r <= headerRowIndex + 8) console.log(`❌ Skipping empty data row ${r}:`, rowData.instrumentName || '(no instrument name)');
+        if (r <= headerRowIndex + 15) {
+          console.log(`❌ Skipping empty/invalid data row ${r}:`, rowData.instrumentName || '(no instrument name)',
+            `| ISIN: ${rowData.isin || 'NONE'}`,
+            `| Current category: ${currentCategory || 'NONE'}`);
+        }
         continue;
       }
       
@@ -616,10 +636,16 @@ function parseExcelFile(filePathOrBuffer) {
         rowData.instrumentType = currentCategory;
         rowData._sheetName = sheetName;
         sheetData.push(rowData);
-        if (sheetData.length <= 3) console.log(`✅ Added row ${r} to category "${currentCategory}":`, rowData);
+        if (sheetData.length <= 5) {
+          console.log(`✅ Added row ${r} to category "${currentCategory}":`,
+            `ISIN: ${rowData.isin}`,
+            `Instrument: ${rowData.instrumentName?.substring(0, 50)}...`);
+        }
       } else {
-        if (r <= headerRowIndex + 10) {
-          console.log(`⚠️  Skipping row ${r} - No category assigned yet. ISIN:`, rowData.isin, 'Instrument:', rowData.instrumentName);
+        if (r <= headerRowIndex + 15) {
+          console.log(`⚠️  Skipping row ${r} - No category assigned yet.`,
+            `ISIN: ${rowData.isin || 'NONE'}`,
+            `Instrument: ${rowData.instrumentName || 'NONE'}`);
         }
       }
     }

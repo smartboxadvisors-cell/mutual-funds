@@ -2,6 +2,8 @@ import { BrowserRouter as Router, Route, Routes, Navigate } from 'react-router-d
 import ImportsTable from './components/ImportsTable';
 import Login from './components/Login';
 import Portfolio from './components/Portfolio'; // <-- new
+import Trading from './components/Trading'; // <-- new trading component
+import Navigation from './components/Navigation'; // <-- new navigation
 import './App.css';
 
 const ProtectedRoute = ({ children }) => {
@@ -20,7 +22,23 @@ export default function App() {
           path="/"
           element={
             <ProtectedRoute>
-              <main><ImportsTable /></main>
+              <div>
+                <Navigation />
+                <main><ImportsTable /></main>
+              </div>
+            </ProtectedRoute>
+          }
+        />
+
+        {/* Trading Dashboard */}
+        <Route
+          path="/trading"
+          element={
+            <ProtectedRoute>
+              <div>
+                <Navigation />
+                <Trading />
+              </div>
             </ProtectedRoute>
           }
         />
@@ -30,7 +48,10 @@ export default function App() {
           path="/:username"
           element={
             <ProtectedRoute>
-              <Portfolio />
+              <div>
+                <Navigation />
+                <Portfolio />
+              </div>
             </ProtectedRoute>
           }
         />

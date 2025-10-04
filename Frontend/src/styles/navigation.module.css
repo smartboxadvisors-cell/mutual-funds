@@ -1,0 +1,125 @@
+/* Navigation Styles */
+
+.navbar {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  padding: 0;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+  position: sticky;
+  top: 0;
+  z-index: 1000;
+}
+
+.navContainer {
+  max-width: 1400px;
+  margin: 0 auto;
+  padding: 0 20px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  height: 70px;
+}
+
+.logo {
+  flex-shrink: 0;
+}
+
+.logoLink {
+  color: white;
+  text-decoration: none;
+  font-size: 1.5rem;
+  font-weight: bold;
+  transition: color 0.3s ease;
+}
+
+.logoLink:hover {
+  color: #f8f9fa;
+}
+
+.navLinks {
+  display: flex;
+  gap: 30px;
+  align-items: center;
+}
+
+.navLink {
+  color: rgba(255, 255, 255, 0.9);
+  text-decoration: none;
+  font-size: 1rem;
+  font-weight: 500;
+  padding: 10px 15px;
+  border-radius: 6px;
+  transition: all 0.3s ease;
+  position: relative;
+}
+
+.navLink:hover {
+  color: white;
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.navLink.active {
+  color: white;
+  background: rgba(255, 255, 255, 0.2);
+  font-weight: 600;
+}
+
+.navLink.active::after {
+  content: '';
+  position: absolute;
+  bottom: -5px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 30px;
+  height: 3px;
+  background: white;
+  border-radius: 2px;
+}
+
+.userInfo {
+  color: rgba(255, 255, 255, 0.9);
+  font-size: 0.9rem;
+}
+
+/* Responsive Design */
+@media (max-width: 768px) {
+  .navContainer {
+    padding: 0 15px;
+    height: 60px;
+  }
+
+  .navLinks {
+    gap: 15px;
+  }
+
+  .navLink {
+    font-size: 0.9rem;
+    padding: 8px 12px;
+  }
+
+  .logoLink {
+    font-size: 1.3rem;
+  }
+
+  .userInfo {
+    font-size: 0.8rem;
+  }
+}
+
+@media (max-width: 480px) {
+  .navLinks {
+    gap: 10px;
+  }
+
+  .navLink {
+    font-size: 0.8rem;
+    padding: 6px 10px;
+  }
+
+  .logoLink {
+    font-size: 1.2rem;
+  }
+
+  .userInfo {
+    display: none; /* Hide user info on very small screens */
+  }
+}

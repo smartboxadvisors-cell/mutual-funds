@@ -1,5 +1,5 @@
 // src/api/instruments.js
-const API_BASE = import.meta.env?.VITE_API_URL || 'https://pp-capital-zdto.vercel.app/api';
+const API_BASE = import.meta.env?.VITE_API_URL || 'https://mutual-funds-kohl.vercel.app/api';
 
 async function apiCall(endpoint, options = {}) {
   const token = localStorage.getItem('token');

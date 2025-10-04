@@ -1,6 +1,6 @@
 // src/api/imports.js
 const RAW_API_BASE =
-  import.meta.env?.VITE_API_URL || 'https://pp-capital-zdto.vercel.app/api';
+  import.meta.env?.VITE_API_URL || 'https://mutual-funds-kohl.vercel.app/api';
 
 const API_BASE = /\/api\/?$/.test(RAW_API_BASE)
   ? RAW_API_BASE.replace(/\/$/, '')
