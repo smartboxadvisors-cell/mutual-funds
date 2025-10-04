@@ -505,9 +505,19 @@ function detectColumnHeaders(worksheet) {
   return { columnMap: {}, headerRowIndex: -1 };
 }
 
-function parseExcelFile(filePath) {
-  console.log('🔍 Starting Excel parsing for:', filePath);
-  const workbook = XLSX.readFile(filePath);
+function parseExcelFile(filePathOrBuffer) {
+  console.log('🔍 Starting Excel parsing...');
+  
+  // Support both file path and buffer
+  let workbook;
+  if (Buffer.isBuffer(filePathOrBuffer)) {
+    console.log('📦 Parsing from memory buffer');
+    workbook = XLSX.read(filePathOrBuffer, { type: 'buffer' });
+  } else {
+    console.log('📁 Parsing from file path:', filePathOrBuffer);
+    workbook = XLSX.readFile(filePathOrBuffer);
+  }
+  
   const allData = [];
   const processedSheets = [];
   

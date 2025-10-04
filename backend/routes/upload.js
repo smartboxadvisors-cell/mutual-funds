@@ -2,28 +2,13 @@
 const express = require('express');
 const multer = require('multer');
 const path = require('path');
-const fs = require('fs');
 const router = express.Router();
 const { parseExcelFile } = require('../utils/parseExcel');
 const Scheme = require('../models/Scheme');
 const InstrumentHolding = require('../models/InstrumentHolding');
 
-// Create uploads directory if it doesn't exist
-const uploadsDir = path.join(__dirname, '../uploads');
-if (!fs.existsSync(uploadsDir)) {
-  fs.mkdirSync(uploadsDir, { recursive: true });
-}
-
-// Configure multer for file uploads
-const storage = multer.diskStorage({
-  destination: (req, file, cb) => {
-    cb(null, uploadsDir);
-  },
-  filename: (req, file, cb) => {
-    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
-    cb(null, file.fieldname + '-' + uniqueSuffix + path.extname(file.originalname));
-  }
-});
+// Configure multer for file uploads (use memory storage for Vercel)
+const storage = multer.memoryStorage();
 
 const upload = multer({
   storage,
@@ -50,10 +35,11 @@ router.post('/', upload.single('file'), async (req, res) => {
       return res.status(400).json({ error: 'No file uploaded' });
     }
 
-    const filePath = req.file.path;
+    // Use buffer from memory storage (Vercel-compatible)
+    const fileBuffer = req.file.buffer;
     
-    // Parse Excel file
-    const parseResult = parseExcelFile(filePath);
+    // Parse Excel file from buffer
+    const parseResult = parseExcelFile(fileBuffer);
     
     // Create or update scheme (upsert by name + reportDate)
     const scheme = await Scheme.findOneAndUpdate(
@@ -149,10 +135,7 @@ router.post('/', upload.single('file'), async (req, res) => {
       insertedCount = insertResult.length;
     }
 
-    // Clean up uploaded file
-    fs.unlink(filePath, (err) => {
-      if (err) console.error('Error deleting uploaded file:', err);
-    });
+    // No need to clean up file (using memory storage)
 
     res.json({
       scheme: {
@@ -173,12 +156,7 @@ router.post('/', upload.single('file'), async (req, res) => {
   } catch (error) {
     console.error('Upload error:', error);
     
-    // Clean up file on error
-    if (req.file && req.file.path) {
-      fs.unlink(req.file.path, (err) => {
-        if (err) console.error('Error deleting file after error:', err);
-      });
-    }
+    // No need to clean up file (using memory storage)
     
     res.status(500).json({ 
       error: error.message || 'Failed to process Excel file' 

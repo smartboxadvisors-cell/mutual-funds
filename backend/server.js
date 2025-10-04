@@ -96,5 +96,11 @@ app.use((req, res) =>
 );
 
 // ---------- Boot ----------
-const PORT = process.env.PORT || 5000;
-app.listen(PORT, () => console.log(`server is listening on port ${PORT}`));
+// For local development
+if (process.env.NODE_ENV !== 'production') {
+  const PORT = process.env.PORT || 5000;
+  app.listen(PORT, () => console.log(`server is listening on port ${PORT}`));
+}
+
+// Export for Vercel serverless
+module.exports = app;
