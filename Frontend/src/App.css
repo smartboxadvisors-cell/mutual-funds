@@ -1,0 +1,23 @@
+*{
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+.data{
+    border: 1px solid;
+}
+.data ul {
+    text-align: center;
+    padding: 10px;
+}
+.data ul li{
+    border: 1px solid;
+    padding: 4px;
+    font-size: 20px;
+    margin: 5px;
+    list-style: none;
+}
+tbody{
+    cursor: pointer;
+}

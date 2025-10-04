@@ -1,0 +1,531 @@
+.wrapper {
+  width: 100%;
+  margin: 28px 0;
+  padding: 0 16px;
+  font-family: Inter, system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
+  color: #0f172a;
+}
+
+.card {
+  background: #fff;
+  border: 1px solid #e5e7eb;
+  border-radius: 12px;
+  box-shadow: 0 1px 2px rgba(16,24,40,0.04);
+}
+
+.errorBox {
+  background: #ffe9e9;
+  border: 1px solid #ffbdbd;
+  color: #7a0000;
+  padding: 10px;
+  border-radius: 8px;
+  margin-bottom: 10px;
+}
+
+.tableScroll {
+  width: 100%;
+  max-height: calc(100vh - 250px);
+  overflow: auto;
+  border: 1px solid #dee2e6;
+  border-radius: 4px;
+  position: relative;
+}
+
+.table {
+  width: 100%;
+  min-width: 100%;
+  border-collapse: separate;
+  border-spacing: 0;
+  table-layout: fixed;
+  font-size: 14px;
+}
+
+.thead {
+  background: #f8fafc;
+}
+
+.filterRow {
+  background: #f8f9fa;
+}
+
+.filterTh {
+  padding: 6px 8px;
+  background-color: #f8f9fa;
+  border-right: 1px solid #dee2e6;
+  border-bottom: 1px solid #dee2e6;
+  position: sticky;
+  top: 47px;
+  z-index: 11;
+}
+
+.filterTh:first-child {
+  border-left: 1px solid #dee2e6;
+}
+
+.filterInput {
+  width: 100%;
+  padding: 4px 8px;
+  border: 1px solid #ced4da;
+  border-radius: 3px;
+  font-size: 13px;
+  outline: none;
+  transition: border-color 0.15s;
+  box-sizing: border-box;
+  font-family: inherit;
+  background: white;
+}
+
+.filterInput:focus {
+  border-color: #80bdff;
+  box-shadow: 0 0 0 0.2rem rgba(0,123,255,.25);
+}
+
+.filterInput::placeholder {
+  color: #6c757d;
+  font-size: 13px;
+}
+
+.th {
+  text-align: left;
+  font-weight: 600;
+  font-size: 13px;
+  color: #ffffff;
+  padding: 12px 12px;
+  border-right: 1px solid #2d3e50;
+  border-bottom: 1px solid #2d3e50;
+  background-color: #3c4f64;
+  white-space: nowrap;
+  position: sticky;
+  top: 0;
+  z-index: 12;
+}
+
+.th:first-child {
+  border-left: none;
+}
+
+.th:last-child {
+  border-right: none;
+}
+
+.thContent {
+  display: flex;
+  align-items: center;
+  position: relative;
+  gap: 8px;
+  height: 100%;
+}
+
+.thLabel {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.resizeHandle {
+  position: absolute;
+  top: 0;
+  right: -4px;
+  width: 8px;
+  height: 100%;
+  cursor: col-resize;
+  user-select: none;
+  touch-action: none;
+}
+
+.resizeHandle::after {
+  content: '';
+  position: absolute;
+  top: 12px;
+  bottom: 12px;
+  left: 3px;
+  width: 1px;
+  background: transparent;
+  transition: background 0.2s ease;
+}
+
+.th:hover .resizeHandle::after,
+.resizeHandle:active::after {
+  background: #cbd5f5;
+}
+
+.td {
+  padding: 8px 12px;
+  border-right: 1px solid #dee2e6;
+  border-bottom: 1px solid #dee2e6;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: #212529;
+  font-size: 14px;
+}
+
+.td:first-child {
+  border-left: 1px solid #dee2e6;
+}
+
+.tr {
+  position: relative;
+  transition: background .12s ease;
+  background: #ffffff;
+}
+
+.tr:nth-child(even) {
+  background: #f8f9fa;
+}
+
+.tr:nth-child(odd) {
+  background: #ffffff;
+}
+
+.trOdd { 
+  background: #f8f9fa;
+}
+
+@keyframes sk { 0% { background-position: 0 0 } 100% { background-position: 200% 0 } }
+.skeleton {
+  height: 12px;
+  width: 70%;
+  background: linear-gradient(90deg, #f1f5f9, #e2e8f0, #f1f5f9);
+  background-size: 200% 100%;
+  animation: sk 1.2s ease-in-out infinite;
+  border-radius: 6px;
+}
+
+.rowHover:hover {
+  background: #e9ecef;
+}
+
+.tr:hover {
+  background: #e9ecef !important;
+}
+
+/* Clamp long text by default */
+.tdClamp {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* On row hover, unwrap to see full data clearly */
+.rowHover:hover .tdClamp {
+  white-space: normal;
+  overflow: visible;
+  text-overflow: clip;
+  z-index: 1; /* keep above neighbors if needed */
+}
+
+.rowHandleRow td {
+  padding: 0;
+  border: none;
+  height: 0;
+  position: relative;
+}
+
+.rowResizeHandle {
+  display: block;
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: -4px;
+  height: 10px;
+  cursor: row-resize;
+  user-select: none;
+  touch-action: none;
+}
+
+.rowResizeHandle::after {
+  content: '';
+  position: absolute;
+  left: 50%;
+  transform: translateX(-50%);
+  top: 4px;
+  width: 80px;
+  height: 2px;
+  background: transparent;
+  transition: background 0.2s ease;
+}
+
+.rowHandleRow:hover .rowResizeHandle::after,
+.rowResizeHandle:active::after {
+  background: #cbd5f5;
+}
+.rowHandleRow {
+  background: transparent;
+}
+
+/* Enhanced Resizable Table Styles */
+.resizableTable {
+  table-layout: fixed;
+  border-collapse: separate;
+  border-spacing: 0;
+}
+
+.resizableTh {
+  position: relative;
+  overflow: hidden;
+  min-width: 50px;
+}
+
+.thContent {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  height: 100%;
+  position: relative;
+}
+
+.columnResizer {
+  position: absolute;
+  top: 0;
+  right: -2px;
+  width: 4px;
+  height: 100%;
+  cursor: col-resize;
+  background: transparent;
+  z-index: 10;
+  transition: background-color 0.2s;
+}
+
+.columnResizer:hover {
+  background: #3b82f6;
+}
+
+.columnResizer:active {
+  background: #1d4ed8;
+}
+
+.resizableRow {
+  position: relative;
+}
+
+.rowResizer {
+  position: absolute;
+  bottom: -2px;
+  left: -100vw;
+  right: 0;
+  height: 4px;
+  cursor: row-resize;
+  background: transparent;
+  z-index: 5;
+  transition: background-color 0.2s;
+}
+
+.rowResizer:hover {
+  background: #3b82f6;
+}
+
+.rowResizer:active {
+  background: #1d4ed8;
+}
+
+.cellContent {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  padding: 2px 0;
+}
+
+/* Resize indicators */
+.resizableTable .th:hover .columnResizer {
+  background: rgba(255, 255, 255, 0.3);
+}
+
+.resizableTable .tr:hover .rowResizer {
+  background: rgba(59, 130, 246, 0.3);
+}
+
+/* Auto-fit hint */
+.thContent span {
+  cursor: pointer;
+  user-select: none;
+}
+
+.thContent span:hover {
+  color: #3b82f6;
+}
+
+/* Prevent text selection during resize */
+.resizableTable.resizing {
+  user-select: none;
+}
+
+.resizableTable.resizing * {
+  cursor: col-resize !important;
+}
+
+.resizableTable.resizing.rowResize * {
+  cursor: row-resize !important;
+}
+
+/* Table Controls */
+.tableControls {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 12px 16px;
+  border-bottom: 1px solid #e5e7eb;
+  background: #f8fafc;
+  border-radius: 12px 12px 0 0;
+}
+
+.viewModeControls {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.controlLabel {
+  font-size: 14px;
+  font-weight: 500;
+  color: #374151;
+}
+
+.buttonGroup {
+  display: flex;
+  border: 1px solid #d1d5db;
+  border-radius: 6px;
+  overflow: hidden;
+}
+
+.modeButton {
+  padding: 6px 12px;
+  border: none;
+  background: #fff;
+  color: #6b7280;
+  font-size: 13px;
+  cursor: pointer;
+  transition: all 0.2s;
+  border-right: 1px solid #d1d5db;
+}
+
+.modeButton:last-child {
+  border-right: none;
+}
+
+.modeButton:hover {
+  background: #f3f4f6;
+  color: #374151;
+}
+
+.modeButton.active {
+  background: #3b82f6;
+  color: white;
+}
+
+.tableActions {
+  display: flex;
+  gap: 8px;
+}
+
+.actionButton {
+  padding: 6px 12px;
+  border: 1px solid #d1d5db;
+  border-radius: 6px;
+  background: #fff;
+  color: #374151;
+  font-size: 13px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.actionButton:hover {
+  background: #f3f4f6;
+  border-color: #9ca3af;
+}
+
+/* Expanded Content Styles */
+.tdExpanded {
+  white-space: normal !important;
+  word-wrap: break-word;
+  word-break: break-word;
+  vertical-align: top;
+  padding: 8px 12px;
+}
+
+.cellContentExpanded {
+  white-space: normal !important;
+  word-wrap: break-word;
+  word-break: break-word;
+  line-height: 1.4;
+  max-height: none;
+  overflow: visible;
+}
+
+/* Auto-fit mode specific styles */
+.resizableTable.autoMode .td {
+  white-space: normal;
+  word-wrap: break-word;
+}
+
+.resizableTable.autoMode .cellContent {
+  white-space: normal;
+  line-height: 1.4;
+}
+
+/* Expanded mode specific styles */
+.resizableTable.expandedMode .td {
+  padding: 12px;
+  min-height: 60px;
+  vertical-align: top;
+}
+
+.resizableTable.expandedMode .cellContent {
+  white-space: normal;
+  word-wrap: break-word;
+  line-height: 1.5;
+}
+
+/* Fit-window mode specific styles */
+.resizableTable.fitWindowMode {
+  width: 100%;
+  table-layout: fixed;
+}
+
+.resizableTable.fitWindowMode .tableScroll {
+  overflow-x: hidden;
+}
+
+.resizableTable.fitWindowMode .td {
+  white-space: normal;
+  word-wrap: break-word;
+  word-break: break-word;
+  overflow: hidden;
+  vertical-align: top;
+}
+
+.resizableTable.fitWindowMode .cellContent {
+  white-space: normal;
+  word-wrap: break-word;
+  word-break: break-word;
+  line-height: 1.4;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+}
+
+/* Better text visibility */
+.cellContent {
+  display: block;
+  width: 100%;
+}
+
+/* Responsive adjustments */
+@media (max-width: 768px) {
+  .tableControls {
+    flex-direction: column;
+    gap: 12px;
+    align-items: stretch;
+  }
+  
+  .viewModeControls {
+    justify-content: center;
+  }
+  
+  .tableActions {
+    justify-content: center;
+  }
+}

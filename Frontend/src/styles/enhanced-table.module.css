@@ -1,0 +1,410 @@
+/* Enhanced Table Styles - PROJECT_PROMPT Implementation */
+
+.wrapper {
+  max-width: 1400px;
+  margin: 20px auto;
+  padding: 0 16px;
+  font-family: Inter, system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
+}
+
+.controlPanel {
+  background: #fff;
+  border: 1px solid #e5e7eb;
+  border-radius: 12px;
+  padding: 16px;
+  margin-bottom: 16px;
+  box-shadow: 0 1px 2px rgba(16,24,40,0.04);
+}
+
+.controlGrid {
+  display: grid;
+  grid-template-columns: 2fr 1fr 1fr;
+  gap: 16px;
+  align-items: end;
+}
+
+.controlGroup {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.label {
+  font-size: 12px;
+  font-weight: 500;
+  color: #374151;
+  margin: 0;
+}
+
+.select, .input {
+  padding: 8px 12px;
+  border: 1px solid #d1d5db;
+  border-radius: 6px;
+  font-size: 14px;
+  background: #fff;
+  outline: none;
+  transition: border-color 0.2s;
+}
+
+.select:focus, .input:focus {
+  border-color: #3b82f6;
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+}
+
+.errorBox {
+  background: #fef2f2;
+  border: 1px solid #fecaca;
+  color: #dc2626;
+  padding: 12px;
+  border-radius: 8px;
+  margin-bottom: 16px;
+}
+
+/* Table Card */
+.tableCard {
+  background: #fff;
+  border: 1px solid #e5e7eb;
+  border-radius: 12px;
+  box-shadow: 0 1px 2px rgba(16,24,40,0.04);
+  overflow: hidden;
+}
+
+.tableContainer {
+  max-height: 70vh;
+  overflow: auto;
+  position: relative;
+}
+
+/* Table Styles - Fixed Layout as per PROJECT_PROMPT */
+.table {
+  width: 100%;
+  table-layout: fixed;
+  border-collapse: separate;
+  border-spacing: 0;
+  font-size: 14px;
+}
+
+/* Sticky Headers - Both rows stick as per PROJECT_PROMPT */
+.stickyHeader {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+}
+
+/* Header Row 1 - Dark blue #2c3e50, white text */
+.headerRow {
+  background: #2c3e50;
+  color: white;
+}
+
+.th {
+  padding: 12px 8px;
+  text-align: left;
+  font-weight: 600;
+  font-size: 12px;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+  cursor: pointer;
+  transition: background-color 0.2s;
+  border-right: 1px solid rgba(255,255,255,0.1);
+}
+
+.th:hover {
+  background: rgba(255,255,255,0.1);
+}
+
+.th:last-child {
+  border-right: none;
+}
+
+/* Column widths as per PROJECT_PROMPT */
+.thName { width: 35%; text-align: left; }
+.thIsin { width: 12%; text-align: center; }
+.thRating { width: 8%; text-align: center; }
+.thQuantity { width: 10%; text-align: right; }
+.thMarketValue { width: 13%; text-align: right; }
+.thNavPercent { width: 12%; text-align: right; }
+.thYtm { width: 10%; text-align: right; }
+
+/* Header Row 2 - Light gray #ecf0f1 */
+.filterRow {
+  background: #ecf0f1;
+  position: sticky;
+  top: 44px; /* Below first header row */
+  z-index: 9;
+}
+
+.filterCell {
+  padding: 8px;
+  border-right: 1px solid #d1d5db;
+}
+
+.filterCell:last-child {
+  border-right: none;
+}
+
+.filterInput {
+  width: 100%;
+  padding: 4px 6px;
+  border: 1px solid #d1d5db;
+  border-radius: 4px;
+  font-size: 12px;
+  outline: none;
+}
+
+.filterInput:focus {
+  border-color: #3b82f6;
+}
+
+.rangeInputs {
+  display: flex;
+  gap: 4px;
+}
+
+.rangeInput {
+  flex: 1;
+  padding: 4px 6px;
+  border: 1px solid #d1d5db;
+  border-radius: 4px;
+  font-size: 12px;
+  outline: none;
+}
+
+.rangeInput:focus {
+  border-color: #3b82f6;
+}
+
+/* Category Rows - Gray background, bold, colspan 7 */
+.categoryRow {
+  background: #f8fafc;
+}
+
+.categoryHeader {
+  padding: 12px 16px;
+  font-weight: bold;
+  font-size: 14px;
+  color: #374151;
+  border-bottom: 2px solid #e5e7eb;
+  text-align: left;
+}
+
+/* Data Rows - White background, 8px padding, borders */
+.dataRow {
+  background: white;
+  transition: background-color 0.1s;
+}
+
+.dataRow:hover {
+  background: #f8fafc;
+}
+
+.oddRow {
+  background: #fafbfc;
+}
+
+.oddRow:hover {
+  background: #f1f5f9;
+}
+
+.td {
+  padding: 8px;
+  border-bottom: 1px solid #f1f5f9;
+  border-right: 1px solid #f1f5f9;
+  vertical-align: top;
+}
+
+.td:last-child {
+  border-right: none;
+}
+
+/* Cell-specific styling as per PROJECT_PROMPT */
+.tdName {
+  text-align: left;
+  word-wrap: break-word;
+}
+
+.tdIsin {
+  text-align: center;
+}
+
+.tdRating {
+  text-align: center;
+}
+
+.tdQuantity, .tdMarketValue, .tdNavPercent, .tdYtm {
+  text-align: right;
+}
+
+/* Content styling */
+.instrumentName {
+  word-wrap: break-word;
+  line-height: 1.3;
+}
+
+.isinCode {
+  font-family: 'Courier New', monospace;
+  font-size: 11px;
+  background: #f3f4f6;
+  padding: 2px 4px;
+  border-radius: 3px;
+}
+
+.rating {
+  color: #059669;
+  font-size: 13px;
+}
+
+.number {
+  font-family: 'Courier New', monospace;
+  font-size: 13px;
+}
+
+.marketValue {
+  font-family: 'Courier New', monospace;
+  font-size: 13px;
+  color: #dc2626;
+}
+
+.percentage {
+  font-family: 'Courier New', monospace;
+  font-size: 13px;
+  color: #7c3aed;
+}
+
+/* Loading skeleton */
+.skeleton {
+  height: 12px;
+  width: 80%;
+  background: linear-gradient(90deg, #f1f5f9, #e2e8f0, #f1f5f9);
+  background-size: 200% 100%;
+  animation: skeleton 1.2s ease-in-out infinite;
+  border-radius: 4px;
+}
+
+@keyframes skeleton {
+  0% { background-position: 0 0; }
+  100% { background-position: 200% 0; }
+}
+
+.noData {
+  text-align: center;
+  padding: 40px 20px;
+  color: #6b7280;
+  font-style: italic;
+}
+
+/* Pagination Controls */
+.paginationControls {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 20px;
+  border-top: 1px solid #e5e7eb;
+  background: #f8fafc;
+}
+
+.paginationButton {
+  padding: 8px 16px;
+  border: 1px solid #d1d5db;
+  border-radius: 6px;
+  background: #fff;
+  color: #374151;
+  font-size: 14px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.paginationButton:hover:not(:disabled) {
+  background: #f3f4f6;
+  border-color: #9ca3af;
+}
+
+.paginationButton:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.paginationInfo {
+  font-size: 14px;
+  color: #6b7280;
+  font-weight: 500;
+}
+
+.clearButton {
+  padding: 8px 16px;
+  border: 1px solid #dc2626;
+  border-radius: 6px;
+  background: #fef2f2;
+  color: #dc2626;
+  font-size: 14px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.clearButton:hover {
+  background: #dc2626;
+  color: white;
+}
+
+.exportButton {
+  padding: 4px 12px;
+  background: #28a745;
+  color: white;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 13px;
+  transition: all 0.2s;
+  margin-left: 10px;
+}
+
+.exportButton:hover {
+  background: #218838;
+  transform: translateY(-1px);
+  box-shadow: 0 2px 4px rgba(0,0,0,0.15);
+}
+
+.exportAllButton {
+  padding: 8px 16px;
+  background: #17a2b8;
+  color: white;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 14px;
+  transition: all 0.2s;
+  margin-left: 10px;
+}
+
+.exportAllButton:hover:not(:disabled) {
+  background: #138496;
+  transform: translateY(-1px);
+  box-shadow: 0 2px 4px rgba(0,0,0,0.15);
+}
+
+.exportAllButton:disabled {
+  background: #6c757d;
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+/* Responsive Design */
+@media (max-width: 768px) {
+  .controlGrid {
+    grid-template-columns: 1fr;
+    gap: 12px;
+  }
+  
+  .table {
+    font-size: 12px;
+  }
+  
+  .th, .td {
+    padding: 6px 4px;
+  }
+  
+  .paginationControls {
+    flex-direction: column;
+    gap: 12px;
+  }
+}
