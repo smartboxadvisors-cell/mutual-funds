@@ -15,21 +15,117 @@ const firstCol = (headers, patterns) => {
   return -1;
 };
 
+const EXCEL_EPOCH_MS = Date.UTC(1899, 11, 30);
+const pad2 = (value) => String(value).padStart(2, "0");
+
+const coerceNumber = (val) => {
+  if (typeof val === 'number' && !Number.isNaN(val)) return val;
+  if (typeof val === 'string') {
+    const cleaned = val.replace(/,/g, '').trim();
+    if (!cleaned) return null;
+    const num = Number(cleaned);
+    return Number.isNaN(num) ? null : num;
+  }
+  return null;
+};
+
+const excelSerialToDate = (serial) => {
+  const wholeDays = Math.floor(serial);
+  const milliseconds = Math.round(wholeDays * 86400000);
+  return new Date(EXCEL_EPOCH_MS + milliseconds);
+};
+
+const formatDate = (date) => {
+  const y = date.getUTCFullYear();
+  const m = pad2(date.getUTCMonth() + 1);
+  const d = pad2(date.getUTCDate());
+  return `${y}-${m}-${d}`;
+};
+
 const toDate = (val) => {
-  if (!val) return "";
-  const d = new Date(val);
-  if (isNaN(d)) return String(val).trim();
-  const y = d.getFullYear();
-  const m = String(d.getMonth() + 1).padStart(2, "0");
-  const day = String(d.getDate()).padStart(2, "0");
-  return `${y}-${m}-${day}`;
+  if (val === null || val === undefined || val === '') return '';
+
+  if (val instanceof Date && !Number.isNaN(val.getTime())) {
+    return formatDate(val);
+  }
+
+  const numeric = coerceNumber(val);
+  if (numeric !== null) {
+    if (numeric > 59 && numeric < 2958465) {
+      const excelDate = excelSerialToDate(numeric);
+      if (!Number.isNaN(excelDate.getTime())) {
+        return formatDate(excelDate);
+      }
+    }
+  }
+
+  const str = String(val).trim();
+  if (!str) return '';
+
+  const dmyMatch = str.match(/^(\d{1,2})[\/-](\d{1,2})[\/-](\d{2,4})$/);
+  if (dmyMatch) {
+    let [, day, month, year] = dmyMatch;
+    if (year.length === 2) {
+      const yearInt = parseInt(year, 10);
+      year = String((yearInt >= 70 ? 1900 : 2000) + yearInt);
+    }
+    const parsedDMY = new Date(Date.UTC(Number(year), Number(month) - 1, Number(day)));
+    if (!Number.isNaN(parsedDMY.getTime())) {
+      return formatDate(parsedDMY);
+    }
+  }
+
+  const parsed = new Date(str);
+  if (!Number.isNaN(parsed.getTime())) {
+    return formatDate(parsed);
+  }
+
+  return str;
+};
+
+const fractionToTime = (fraction) => {
+  const normalized = ((fraction % 1) + 1) % 1;
+  const totalSeconds = Math.round(normalized * 86400) % 86400;
+  const hours = Math.floor(totalSeconds / 3600);
+  const minutes = Math.floor((totalSeconds % 3600) / 60);
+  const seconds = totalSeconds % 60;
+  return `${pad2(hours)}:${pad2(minutes)}:${pad2(seconds)}`;
 };
 
 const toTime = (val) => {
-  if (!val) return "";
+  if (val === null || val === undefined || val === '') return '';
+
+  if (val instanceof Date && !Number.isNaN(val.getTime())) {
+    return `${pad2(val.getUTCHours())}:${pad2(val.getUTCMinutes())}:${pad2(val.getUTCSeconds())}`;
+  }
+
+  const numeric = coerceNumber(val);
+  if (numeric !== null) {
+    if (numeric >= 0 && numeric < 1) {
+      return fractionToTime(numeric);
+    }
+
+    if (numeric > 1 && numeric < 2958465) {
+      const fraction = numeric % 1;
+      if (fraction > 0) {
+        return fractionToTime(fraction);
+      }
+    }
+
+    if (numeric >= 0 && numeric <= 24 && Number.isInteger(numeric)) {
+      return `${pad2(numeric)}:00:00`;
+    }
+  }
+
   const s = String(val).trim();
+  if (!s) return '';
+
   if (/^\d{1,2}:\d{2}:\d{2}$/.test(s)) return s;
   if (/^\d{1,2}:\d{2}$/.test(s)) return `${s}:00`;
+
+  const inlineMatch = s.match(/(\d{1,2}:\d{2}:\d{2})$/);
+  if (inlineMatch) return inlineMatch[1];
+
   return s;
 };
 
@@ -293,7 +389,7 @@ export default function TradePreviewBuilder() {
         return a.ISIN.localeCompare(b.ISIN);
       });
 
-      setRows(tradeRows.slice(0, 400));
+      setRows(tradeRows);
     } catch (err) {
       console.error("Build preview error:", err);
       alert("Error building preview: " + err.message);
