@@ -278,8 +278,59 @@
   overflow-x: auto;
 }
 
+/* Resizable Table Styles */
+.resizableTableContainer {
+  position: relative;
+  overflow: hidden;
+}
+
+.resizableTable {
+  width: 100%;
+  border-collapse: collapse;
+  table-layout: auto;
+}
+
+.resizableTable th,
+.resizableTable td {
+  position: relative;
+  padding: 8px 12px;
+  border: 1px solid #ddd;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Resizable column handles */
+.resizableTable th {
+  position: relative;
+  background: #f5f5f5;
+  font-weight: 600;
+  color: #333;
+}
+
+.resizableTable th::after {
+  content: '';
+  position: absolute;
+  right: 0;
+  top: 0;
+  bottom: 0;
+  width: 2px;
+  background: transparent;
+  cursor: col-resize;
+  user-select: none;
+}
+
+.resizableTable th:hover::after {
+  background: #007bff;
+}
+
+.resizableTable th.resizing::after {
+  background: #007bff;
+  width: 3px;
+}
+
 .transactionsTable .table {
-  min-width: 2000px; /* Increased for 16 columns */
+  min-width: 1800px; /* Reduced for 15 columns */
 }
 
 .transactionsTable th,
@@ -383,6 +434,42 @@
   font-weight: 500;
 }
 
+.emptyRow {
+  text-align: center;
+  padding: 40px !important;
+  color: #7f8c8d;
+  font-style: italic;
+  background: #f8f9fa;
+}
+
+/* Filter Results Summary */
+.tableHeader {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 20px;
+  padding-bottom: 15px;
+  border-bottom: 1px solid #ecf0f1;
+}
+
+.filterResults {
+  display: flex;
+  align-items: center;
+  gap: 15px;
+}
+
+.resultsCount {
+  color: #2c3e50;
+  font-weight: 600;
+  font-size: 1rem;
+}
+
+.filterIndicator {
+  color: #7f8c8d;
+  font-size: 0.9rem;
+  font-style: italic;
+}
+
 /* Responsive Design */
 @media (max-width: 768px) {
   .container {
@@ -423,7 +510,7 @@
   }
 
   .transactionsTable .table {
-    min-width: 1600px;
+    min-width: 1400px;
   }
 
   .transactionsTable th,
@@ -452,7 +539,7 @@
   }
 
   .transactionsTable .table {
-    min-width: 1400px;
+    min-width: 1200px;
     font-size: 0.75rem;
   }
 
@@ -460,6 +547,18 @@
   .transactionsTable td {
     max-width: 80px;
     padding: 4px 2px;
+  }
+
+  .tableHeader {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 10px;
+  }
+
+  .filterResults {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 5px;
   }
 
   .paginationWrapper {

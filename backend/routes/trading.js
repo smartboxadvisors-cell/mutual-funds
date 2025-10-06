@@ -35,28 +35,63 @@ router.post('/upload', upload.single('file'), async (req, res) => {
     }
 
     const fileBuffer = req.file.buffer;
-    const fileName = req.file.originalname;
+    const originalFileName = req.file.originalname;
+    const fileName = originalFileName.toLowerCase();
     const fileExt = path.extname(fileName).toLowerCase();
+
+    console.log('=================================================');
+    console.log(`📁 Original File Name: ${originalFileName}`);
+    console.log(`📁 Lowercase File Name: ${fileName}`);
+    console.log('=================================================');
 
     let rawData = [];
     let exchangeType = 'UNKNOWN';
     let imported = 0;
     let duplicates = 0;
 
-    // Parse based on file type
+    // Detect exchange type from filename ONLY - priority to exact match
+    if (fileName.startsWith('nse')) {
+      exchangeType = 'NSE';
+      console.log(`✅ Exchange type detected from filename START: NSE`);
+    } else if (fileName.startsWith('bse')) {
+      exchangeType = 'BSE';
+      console.log(`✅ Exchange type detected from filename START: BSE`);
+    } else if (fileName.includes(' nse ') || fileName.includes('_nse_')) {
+      exchangeType = 'NSE';
+      console.log(`✅ Exchange type detected from filename CONTAINS: NSE`);
+    } else if (fileName.includes(' bse ') || fileName.includes('_bse_')) {
+      exchangeType = 'BSE';
+      console.log(`✅ Exchange type detected from filename CONTAINS: BSE`);
+    }
+    
+    console.log(`🔍 Final Exchange Type Before Parsing: ${exchangeType}`);
+
+    // Parse based on file type - FORCE exchange type from filename, DON'T override
     if (fileExt === '.csv') {
-      const parseResult = await parseCSVData(fileBuffer);
+      const parseResult = await parseCSVData(fileBuffer, exchangeType);
       rawData = parseResult.data;
-      exchangeType = parseResult.exchangeType;
+      // ONLY use parsed exchange type if we couldn't detect from filename
+      if (exchangeType === 'UNKNOWN') {
+        exchangeType = parseResult.exchangeType;
+        console.log(`⚠️ Exchange type from CSV content: ${exchangeType}`);
+      } else {
+        console.log(`✅ Keeping filename-detected exchange type: ${exchangeType}`);
+      }
     } else if (['.xlsx', '.xls'].includes(fileExt)) {
-      const parseResult = await parseExcelData(fileBuffer);
+      const parseResult = await parseExcelData(fileBuffer, exchangeType);
       rawData = parseResult.data;
-      exchangeType = parseResult.exchangeType;
+      // ONLY use parsed exchange type if we couldn't detect from filename
+      if (exchangeType === 'UNKNOWN') {
+        exchangeType = parseResult.exchangeType;
+        console.log(`⚠️ Exchange type from Excel content: ${exchangeType}`);
+      } else {
+        console.log(`✅ Keeping filename-detected exchange type: ${exchangeType}`);
+      }
     } else {
       throw new Error('Unsupported file type');
     }
 
-    console.log(`Detected exchange type: ${exchangeType}`);
+    console.log(`🎯 FINAL Exchange Type for Processing: ${exchangeType}`);
 
     // Validate and transform data
     const results = [];
@@ -139,7 +174,7 @@ router.post('/upload', upload.single('file'), async (req, res) => {
 });
 
 // Parse CSV data from buffer and detect exchange type
-async function parseCSVData(buffer) {
+async function parseCSVData(buffer, detectedExchange = 'UNKNOWN') {
   return new Promise((resolve, reject) => {
     const results = [];
     const csvData = buffer.toString();
@@ -148,13 +183,13 @@ async function parseCSVData(buffer) {
     const lines = csvData.split('\n').filter(line => line.trim());
 
     if (lines.length === 0) {
-      resolve({ data: [], exchangeType: 'UNKNOWN' });
+      resolve({ data: [], exchangeType: detectedExchange !== 'UNKNOWN' ? detectedExchange : 'UNKNOWN' });
       return;
     }
 
-    // Detect exchange type from header
+    // Detect exchange type from header (only if not already detected from filename)
     const firstLine = lines[0].toLowerCase();
-    let exchangeType = 'UNKNOWN';
+    let exchangeType = detectedExchange;
     let startIndex = 0;
 
     // Enhanced BSE Detection Patterns (more comprehensive)
@@ -183,28 +218,29 @@ async function parseCSVData(buffer) {
       'settlement date', 'settle date', 'settlement dt'
     ];
 
-    const bseScore = bsePatterns.reduce((score, pattern) => score + (firstLine.includes(pattern) ? 1 : 0), 0);
-    const nseScore = nsePatterns.reduce((score, pattern) => score + (firstLine.includes(pattern) ? 1 : 0), 0);
+    // Only detect from content if not already detected from filename
+    if (exchangeType === 'UNKNOWN') {
+      const bseScore = bsePatterns.reduce((score, pattern) => score + (firstLine.includes(pattern) ? 1 : 0), 0);
+      const nseScore = nsePatterns.reduce((score, pattern) => score + (firstLine.includes(pattern) ? 1 : 0), 0);
 
-    // Determine exchange type with improved logic
-    if (bseScore >= 2) { // Lower threshold for BSE
-      exchangeType = 'BSE';
-      if (bsePatterns.some(pattern => firstLine.includes(pattern))) {
-        startIndex = 1;
+      // Determine exchange type with improved logic
+      if (bseScore >= 2) {
+        exchangeType = 'BSE';
+      } else if (nseScore >= 1) {
+        exchangeType = 'NSE';
+      } else {
+        exchangeType = 'BSE';
+        console.log(`Unclear exchange type for CSV, defaulting to BSE`);
+        console.log(`Available patterns found: BSE=${bseScore}, NSE=${nseScore}`);
       }
-    } else if (nseScore >= 1) { // Lower threshold for NSE
-      exchangeType = 'NSE';
-      if (nsePatterns.some(pattern => firstLine.includes(pattern))) {
-        startIndex = 1;
-      }
-    } else {
-      // Default to BSE if unclear, but log for debugging
-      exchangeType = 'BSE';
-      console.log(`Unclear exchange type for CSV, defaulting to BSE`);
-      console.log(`Available patterns found: BSE=${bseScore}, NSE=${nseScore}`);
+
+      console.log(`CSV Exchange detection - BSE score: ${bseScore}, NSE score: ${nseScore}, Type: ${exchangeType}`);
     }
 
-    console.log(`CSV Exchange detection - BSE score: ${bseScore}, NSE score: ${nseScore}, Type: ${exchangeType}`);
+    // Detect if first line is header
+    if (bsePatterns.some(pattern => firstLine.includes(pattern)) || nsePatterns.some(pattern => firstLine.includes(pattern))) {
+      startIndex = 1;
+    }
 
     for (let i = startIndex; i < lines.length; i++) {
       const line = lines[i].trim();
@@ -306,10 +342,10 @@ async function parseCSVData(buffer) {
 }
 
 // Parse Excel data from buffer and detect exchange type
-async function parseExcelData(buffer) {
+async function parseExcelData(buffer, detectedExchange = 'UNKNOWN') {
   const workbook = XLSX.read(buffer, { type: 'buffer' });
   const results = [];
-  let exchangeType = 'UNKNOWN';
+  let exchangeType = detectedExchange;
 
   // Process all sheets
   for (const sheetName of workbook.SheetNames) {
@@ -318,7 +354,7 @@ async function parseExcelData(buffer) {
 
     if (jsonData.length === 0) continue;
 
-    // Detect exchange type from first row
+    // Detect exchange type from first row (only if not already detected from filename)
     const firstRow = jsonData[0].map(cell => String(cell || '').toLowerCase());
     let startIndex = 0;
 
@@ -348,28 +384,30 @@ async function parseExcelData(buffer) {
       'settlement date', 'settle date'
     ];
 
-    const bseScore = bsePatterns.reduce((score, pattern) => score + (firstRow.some(cell => cell.includes(pattern)) ? 1 : 0), 0);
-    const nseScore = nsePatterns.reduce((score, pattern) => score + (firstRow.some(cell => cell.includes(pattern)) ? 1 : 0), 0);
+    // Only detect from content if not already detected from filename
+    if (exchangeType === 'UNKNOWN') {
+      const bseScore = bsePatterns.reduce((score, pattern) => score + (firstRow.some(cell => cell.includes(pattern)) ? 1 : 0), 0);
+      const nseScore = nsePatterns.reduce((score, pattern) => score + (firstRow.some(cell => cell.includes(pattern)) ? 1 : 0), 0);
 
-    // Determine exchange type with fallback logic
-    if (bseScore >= 3) { // Require at least 3 BSE patterns
-      exchangeType = 'BSE';
-      if (bsePatterns.some(pattern => firstRow.some(cell => cell.includes(pattern)))) {
-        startIndex = 1;
+      // Determine exchange type with fallback logic
+      if (bseScore >= 3) {
+        exchangeType = 'BSE';
+      } else if (nseScore >= 2) {
+        exchangeType = 'NSE';
+      } else {
+        exchangeType = 'BSE';
+        console.log(`Unclear exchange type for sheet "${sheetName}", defaulting to BSE`);
       }
-    } else if (nseScore >= 2) { // Require at least 2 NSE patterns
-      exchangeType = 'NSE';
-      if (nsePatterns.some(pattern => firstRow.some(cell => cell.includes(pattern)))) {
-        startIndex = 1;
-      }
-    } else {
-      // Default to BSE if unclear
-      exchangeType = 'BSE';
-      console.log(`Unclear exchange type for sheet "${sheetName}", defaulting to BSE`);
+
+      console.log(`Excel Sheet "${sheetName}" - BSE score: ${bseScore}, NSE score: ${nseScore}, Type: ${exchangeType}`);
+      console.log(`First row cells:`, firstRow);
     }
 
-    console.log(`Excel Sheet "${sheetName}" - BSE score: ${bseScore}, NSE score: ${nseScore}, Type: ${exchangeType}`);
-    console.log(`First row cells:`, firstRow);
+    // Detect if first row is header
+    if (bsePatterns.some(pattern => firstRow.some(cell => cell.includes(pattern))) || 
+        nsePatterns.some(pattern => firstRow.some(cell => cell.includes(pattern)))) {
+      startIndex = 1;
+    }
 
     for (let i = startIndex; i < jsonData.length; i++) {
       const row = jsonData[i];
@@ -466,9 +504,81 @@ async function parseExcelData(buffer) {
   return { data: results, exchangeType };
 }
 
+// Helper function to format trade time for BSE (convert decimal to HH:MM:SS)
+function formatBSETradeTime(timeValue) {
+  if (!timeValue) return '';
+  
+  // If it's a decimal (Excel time format)
+  if (typeof timeValue === 'number' && timeValue < 1) {
+    const totalSeconds = Math.round(timeValue * 24 * 60 * 60);
+    const hours = Math.floor(totalSeconds / 3600);
+    const minutes = Math.floor((totalSeconds % 3600) / 60);
+    const seconds = totalSeconds % 60;
+    return `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
+  }
+  
+  // If it's already a string in HH:MM or HH:MM:SS format
+  const timeStr = String(timeValue).trim();
+  if (/^\d{1,2}:\d{2}(:\d{2})?$/.test(timeStr)) {
+    if (timeStr.split(':').length === 2) {
+      return `${timeStr}:00`;
+    }
+    return timeStr;
+  }
+  
+  return timeStr;
+}
+
+// Helper function to format maturity date (convert Excel date to DD-MM-YYYY)
+function formatMaturityDate(dateValue) {
+  if (!dateValue) return '';
+  
+  // If it's an Excel date number (days since 1900-01-01)
+  if (typeof dateValue === 'number') {
+    const excelEpoch = new Date(1900, 0, 1);
+    const date = new Date(excelEpoch.getTime() + (dateValue - 2) * 24 * 60 * 60 * 1000);
+    const day = String(date.getDate()).padStart(2, '0');
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const year = date.getFullYear();
+    return `${day}-${month}-${year}`;
+  }
+  
+  // If it's a string in DD/MM/YYYY format
+  const dateStr = String(dateValue).trim();
+  if (/^\d{1,2}\/\d{1,2}\/\d{4}$/.test(dateStr)) {
+    const parts = dateStr.split('/');
+    return `${parts[0].padStart(2, '0')}-${parts[1].padStart(2, '0')}-${parts[2]}`;
+  }
+  
+  return dateStr;
+}
+
+// Helper function to format NSE trade time (remove date, keep only time)
+function formatNSETradeTime(dateTimeValue) {
+  if (!dateTimeValue) return '';
+  
+  const dateTimeStr = String(dateTimeValue).trim();
+  
+  // Pattern: DD-MM-YYYY HH:MM:SS or similar
+  const match = dateTimeStr.match(/(\d{1,2}[-\/]\d{1,2}[-\/]\d{4})\s+(\d{1,2}:\d{2}:\d{2})/);
+  if (match) {
+    return match[2]; // Return only the time part
+  }
+  
+  // If it's already just time
+  if (/^\d{1,2}:\d{2}:\d{2}$/.test(dateTimeStr)) {
+    return dateTimeStr;
+  }
+  
+  return dateTimeStr;
+}
+
 // Transform row data to unified transaction object (16 columns)
 function transformRowToUnifiedTransaction(row, rowNumber, exchangeType) {
   try {
+    console.log(`🔄 Transforming row ${rowNumber} for exchange: ${exchangeType}`);
+    console.log('Raw row data:', JSON.stringify(row, null, 2));
+    
     let symbol = '';
     let tradeDate = '';
     let tradeTime = '';
@@ -483,6 +593,7 @@ function transformRowToUnifiedTransaction(row, rowNumber, exchangeType) {
     let orderType = '';
     let settlementStatus = '';
     let settlementDate = '';
+    let rating = '';
 
     if (exchangeType === 'BSE') {
       // BSE format mapping
@@ -490,14 +601,19 @@ function transformRowToUnifiedTransaction(row, rowNumber, exchangeType) {
       isin = row.isin || '';
       issuerName = row.issuerName || '';
       coupon = row.coupon || '';
-      maturityDate = row.maturityDate || '';
+      maturityDate = formatMaturityDate(row.maturityDate || '');
       tradeDate = row.dealDate || '';
       settlementType = row.settlementType || '';
       tradeAmount = row.tradeAmount || '';
       tradePrice = row.tradePrice || '';
       yieldValue = row.yield || '';
-      tradeTime = row.tradeTime || '';
+      tradeTime = formatBSETradeTime(row.tradeTime || '');
       orderType = row.orderType || '';
+      
+      // Get rating from master list
+      rating = masterRatings[isin] || '';
+
+      console.log(`BSE Data - Amount: ${tradeAmount}, Price: ${tradePrice}, Time: ${tradeTime}, Maturity: ${maturityDate}, Rating: ${rating}`);
 
       // For BSE, use provided serial number or calculate
       const serialNo = row.serialNo || rowNumber.toString();
@@ -519,6 +635,7 @@ function transformRowToUnifiedTransaction(row, rowNumber, exchangeType) {
         orderType,
         settlementStatus: '-',
         settlementDate: '-',
+        rating,
         transactionId: `${symbol}_${tradeDate}_${orderType}_${tradeAmount}_${tradePrice}`
       };
 
@@ -543,14 +660,19 @@ function transformRowToUnifiedTransaction(row, rowNumber, exchangeType) {
         }
       }
 
-      maturityDate = row.maturityDate || '';
+      maturityDate = formatMaturityDate(row.maturityDate || '');
       tradeDate = row.date || '';
       tradeAmount = row.dealSize || '';
       tradePrice = row.price || '';
       yieldValue = row.yield || '';
-      tradeTime = row.tradeTime || '';
+      tradeTime = formatNSETradeTime(row.tradeTime || '');
       settlementStatus = row.settlementStatus || '';
       settlementDate = row.settlementDate || '';
+      
+      // Get rating from master list
+      rating = masterRatings[isin] || '';
+
+      console.log(`NSE Data - Amount: ${tradeAmount}, Price: ${tradePrice}, Time: ${tradeTime}, Maturity: ${maturityDate}, Rating: ${rating}`);
 
       // Determine order type from deal types
       const sellerDealType = row.sellerDealType?.toUpperCase() || '';
@@ -584,6 +706,7 @@ function transformRowToUnifiedTransaction(row, rowNumber, exchangeType) {
         orderType,
         settlementStatus,
         settlementDate,
+        rating,
         transactionId: `${symbol}_${tradeDate}_${orderType}_${tradeAmount}_${tradePrice}`
       };
 
@@ -630,6 +753,71 @@ function parseCSVLine(line) {
 
   return result;
 }
+
+// In-memory storage for master ratings (in production, use database)
+let masterRatings = {};
+
+// POST /api/trading/upload-master - Upload master list for ratings
+router.post('/upload-master', upload.single('file'), async (req, res) => {
+  try {
+    if (!req.file) {
+      return res.status(400).json({ error: 'No file uploaded' });
+    }
+
+    const fileBuffer = req.file.buffer;
+    const fileName = req.file.originalname;
+    const fileExt = path.extname(fileName).toLowerCase();
+
+    if (!['.xlsx', '.xls'].includes(fileExt)) {
+      return res.status(400).json({ error: 'Only Excel files (.xlsx, .xls) are allowed for master list' });
+    }
+
+    // Parse Excel file
+    const workbook = XLSX.read(fileBuffer, { type: 'buffer' });
+    const sheetName = workbook.SheetNames[0];
+    const worksheet = workbook.Sheets[sheetName];
+    const jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1 });
+
+    // Parse ratings (assuming column 0 is ISIN, column 1 is Rating)
+    const ratings = {};
+    let processedCount = 0;
+
+    for (let i = 1; i < jsonData.length; i++) { // Skip header row
+      const row = jsonData[i];
+      if (!row || row.length < 2) continue;
+
+      const isin = String(row[0] || '').trim();
+      const ratingRaw = String(row[1] || '').trim();
+
+      if (isin && ratingRaw) {
+        // Parse multiple ratings separated by ()
+        const ratingParts = ratingRaw.split('()').map(r => r.trim()).filter(r => r);
+        const formattedRating = ratingParts.join(' | ');
+        
+        ratings[isin] = formattedRating;
+        processedCount++;
+      }
+    }
+
+    // Store in memory (in production, save to database)
+    masterRatings = { ...masterRatings, ...ratings };
+
+    console.log(`Master list uploaded: ${processedCount} ratings loaded`);
+
+    res.json({
+      success: true,
+      message: `Successfully loaded ${processedCount} ratings from master list`,
+      ratings: masterRatings,
+      processedCount
+    });
+
+  } catch (error) {
+    console.error('Master list upload error:', error);
+    res.status(500).json({
+      error: error.message || 'Failed to process master list'
+    });
+  }
+});
 
 // GET /api/trading/portfolio - Get current portfolio (mock data for now)
 router.get('/portfolio', async (req, res) => {
