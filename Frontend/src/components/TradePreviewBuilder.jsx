@@ -1,4 +1,4 @@
-import React, { useMemo, useState, useCallback } from "react";
+import React, { useMemo, useState, useCallback, useRef, useLayoutEffect } from "react";
 import * as XLSX from "xlsx";
 import Papa from "papaparse";
 
@@ -188,6 +188,8 @@ export default function TradePreviewBuilder() {
   const [isDragging, setIsDragging] = useState(false);
   const [currentPage, setCurrentPage] = useState(1);
   const [itemsPerPage, setItemsPerPage] = useState(50);
+  const headerRowRef = useRef(null);
+  const [filterTop, setFilterTop] = useState('0px');
 
   const handleFileInput = (e) => {
     const files = Array.from(e.target.files || []);
@@ -494,6 +496,18 @@ export default function TradePreviewBuilder() {
     return Math.max(1, maxParts);
   }, [rows]);
 
+  useLayoutEffect(() => {
+    const updateStickyOffsets = () => {
+      if (!headerRowRef.current) return;
+      const headerHeight = headerRowRef.current.getBoundingClientRect().height;
+      setFilterTop(`${headerHeight}px`);
+    };
+
+    updateStickyOffsets();
+    window.addEventListener('resize', updateStickyOffsets);
+    return () => window.removeEventListener('resize', updateStickyOffsets);
+  }, [maxRatingColumns]);
+
   // Pagination
   const totalPages = Math.ceil(filteredRows.length / itemsPerPage);
   const startIndex = (currentPage - 1) * itemsPerPage;
@@ -669,8 +683,11 @@ export default function TradePreviewBuilder() {
             </div>
             <div className="overflow-y-auto max-w-full w-full" style={{ maxHeight: 'calc(100vh - 300px)' }}>
               <table className="w-full table-auto border-collapse">
-                <thead className="bg-gray-100 sticky top-0 z-10">
-                  <tr>
+                <thead>
+                  <tr
+                    ref={headerRowRef}
+                    className="bg-gray-100 sticky top-0 z-20 shadow-sm"
+                  >
                     <th className="px-2 py-2 text-left text-xs font-bold text-gray-700 uppercase tracking-wide border-b border-gray-300 border-r border-gray-200">
                       Exchange
                     </th>
@@ -713,8 +730,10 @@ export default function TradePreviewBuilder() {
                       </th>
                     ))}
                   </tr>
-                  {/* Filter Row */}
-                  <tr className="bg-white">
+                  <tr
+                    className="bg-white sticky z-10"
+                    style={{ top: filterTop }}
+                  >
                     <th className="px-2 py-1.5 border-b-2 border-gray-300 border-r border-gray-200">
                       <input
                         type="text"
@@ -832,6 +851,7 @@ export default function TradePreviewBuilder() {
                     ))}
                   </tr>
                 </thead>
+
                 <tbody className="bg-white">
                   {paginatedRows.length === 0 ? (
                     <tr>
@@ -1034,5 +1054,4 @@ export default function TradePreviewBuilder() {
     </div>
   );
 }
-
 
