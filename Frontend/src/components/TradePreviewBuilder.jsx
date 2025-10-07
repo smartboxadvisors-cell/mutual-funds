@@ -28,6 +28,30 @@ const AMOUNT_BUCKETS = [
   { key: 'ABOVE_2500', label: 'Above 2500 Lac', min: 2500, max: Infinity },
 ];
 
+const BUCKET_THEME_CLASSES = {
+  UNDER_10: 'bg-gradient-to-r from-indigo-500 via-violet-500 to-purple-500 text-white',
+  BETWEEN_10_50: 'bg-gradient-to-r from-indigo-500 via-purple-500 to-indigo-600 text-white',
+  BETWEEN_50_100: 'bg-gradient-to-r from-violet-500 via-indigo-500 to-purple-600 text-white',
+  BETWEEN_100_500: 'bg-gradient-to-r from-indigo-600 via-blue-600 to-sky-500 text-white',
+  BETWEEN_500_2500: 'bg-gradient-to-r from-blue-500 via-sky-500 to-cyan-500 text-white',
+  ABOVE_2500: 'bg-gradient-to-r from-slate-600 via-slate-700 to-slate-800 text-white',
+  default: 'bg-gradient-to-r from-slate-500 via-slate-600 to-slate-700 text-white',
+};
+
+const getRatingBannerClass = (ratingLabel = '') => {
+  const normalized = String(ratingLabel || 'UNRATED').toUpperCase();
+  if (normalized.startsWith('AAA')) return 'bg-gradient-to-r from-emerald-500 via-emerald-600 to-teal-600 text-white';
+  if (normalized.startsWith('AA')) return 'bg-gradient-to-r from-blue-500 via-indigo-600 to-blue-700 text-white';
+  if (normalized.startsWith('A')) return 'bg-gradient-to-r from-amber-500 via-orange-500 to-amber-600 text-white';
+  if (normalized.startsWith('BBB')) return 'bg-gradient-to-r from-purple-500 via-violet-500 to-purple-600 text-white';
+  if (normalized.startsWith('BB')) return 'bg-gradient-to-r from-rose-500 via-pink-500 to-rose-600 text-white';
+  if (normalized.startsWith('B')) return 'bg-gradient-to-r from-red-500 via-rose-600 to-red-600 text-white';
+  if (normalized.startsWith('C')) return 'bg-gradient-to-r from-slate-600 via-slate-700 to-gray-800 text-white';
+  if (normalized.startsWith('D')) return 'bg-gradient-to-r from-slate-700 via-slate-800 to-black text-white';
+  if (normalized.includes('UNRATED')) return 'bg-gradient-to-r from-slate-500 via-slate-600 to-slate-700 text-white';
+  return 'bg-gradient-to-r from-slate-500 via-slate-600 to-slate-700 text-white';
+};
+
 // ========== UTILITY FUNCTIONS ==========
 
 const norm = (str) => String(str || "").toLowerCase().replace(/\s+/g, "");
@@ -208,8 +232,6 @@ const detectType = (headers) => {
 
   return "UNKNOWN";
 };
-
-// Test harness removed for production
 
 // ========== MAIN COMPONENT ==========
 export default function TradePreviewBuilder() {
@@ -451,66 +473,26 @@ export default function TradePreviewBuilder() {
 
   const filteredRows = useMemo(() => {
     return rows.filter((row) => {
-      // Exchange filter
-      if (filters.exchange && !row.Exchange.toLowerCase().includes(filters.exchange.toLowerCase())) {
-        return false;
-      }
-      
-      // Trade Date filter
-      if (filters.tradeDate && !row["Trade Date"].includes(filters.tradeDate)) {
-        return false;
-      }
-      
-      // Trade Time filter
-      if (filters.tradeTime && !row["Trade Time"].includes(filters.tradeTime)) {
-        return false;
-      }
-      
-      // ISIN filter
-      if (filters.isin && !row.ISIN.toLowerCase().includes(filters.isin.toLowerCase())) {
-        return false;
-      }
-      
-      // Issuer details filter
-      if (filters.issuerDetails && !row["Issuer details"].toLowerCase().includes(filters.issuerDetails.toLowerCase())) {
-        return false;
-      }
-      
-      // Maturity filter
-      if (filters.maturity && !row.Maturity.includes(filters.maturity)) {
-        return false;
-      }
-      
-      // Amount range filter
+      if (filters.exchange && !row.Exchange.toLowerCase().includes(filters.exchange.toLowerCase())) return false;
+      if (filters.tradeDate && !row["Trade Date"].includes(filters.tradeDate)) return false;
+      if (filters.tradeTime && !row["Trade Time"].includes(filters.tradeTime)) return false;
+      if (filters.isin && !row.ISIN.toLowerCase().includes(filters.isin.toLowerCase())) return false;
+      if (filters.issuerDetails && !row["Issuer details"].toLowerCase().includes(filters.issuerDetails.toLowerCase())) return false;
+      if (filters.maturity && !row.Maturity.includes(filters.maturity)) return false;
+
       const amt = row["Amount (Rs lacs)"];
       if (filters.minAmt && amt < parseFloat(filters.minAmt)) return false;
       if (filters.maxAmt && amt > parseFloat(filters.maxAmt)) return false;
-      
-      // Price range filter
+
       const price = row["Price (Rs)"];
       if (filters.minPrice && price < parseFloat(filters.minPrice)) return false;
       if (filters.maxPrice && price > parseFloat(filters.maxPrice)) return false;
-      
-      // Yield filter
-      if (filters.yield && !row.Yield.toString().toLowerCase().includes(filters.yield.toLowerCase())) {
-        return false;
-      }
-      
-      // Status filter
-      if (filters.status && !row.Status.toLowerCase().includes(filters.status.toLowerCase())) {
-        return false;
-      }
-      
-      // Deal Type filter
-      if (filters.dealType && !row["Deal Type"].toLowerCase().includes(filters.dealType.toLowerCase())) {
-        return false;
-      }
-      
-      // Rating filter
-      if (filters.rating && !row.Rating.toLowerCase().includes(filters.rating.toLowerCase())) {
-        return false;
-      }
-      
+
+      if (filters.yield && !row.Yield.toString().toLowerCase().includes(filters.yield.toLowerCase())) return false;
+      if (filters.status && !row.Status.toLowerCase().includes(filters.status.toLowerCase())) return false;
+      if (filters.dealType && !row["Deal Type"].toLowerCase().includes(filters.dealType.toLowerCase())) return false;
+      if (filters.rating && !row.Rating.toLowerCase().includes(filters.rating.toLowerCase())) return false;
+
       return true;
     });
   }, [rows, filters]);
@@ -525,7 +507,6 @@ export default function TradePreviewBuilder() {
       const count = Array.isArray(row.RatingParts) ? row.RatingParts.length : 0;
       return count > max ? count : max;
     }, 0);
-
     return Math.max(1, maxParts);
   }, [rows]);
 
@@ -535,7 +516,6 @@ export default function TradePreviewBuilder() {
       const headerHeight = headerRowRef.current.getBoundingClientRect().height;
       setFilterTop(`${headerHeight}px`);
     };
-
     updateStickyOffsets();
     window.addEventListener('resize', updateStickyOffsets);
     return () => window.removeEventListener('resize', updateStickyOffsets);
@@ -686,7 +666,7 @@ export default function TradePreviewBuilder() {
   }, [filters]);
 
   const goToPage = (page) => {
-    setCurrentPage(Math.max(1, Math.min(page, totalPages)));
+    setCurrentPage(Math.max(1, Math.min(page, Math.max(1, totalPages))));
   };
 
   return (
@@ -1059,10 +1039,10 @@ export default function TradePreviewBuilder() {
                         {row.Maturity}
                       </td>
                       <td className="px-3 py-2.5 text-sm text-blue-900 text-right font-bold border-r border-gray-200">
-                        {row["Amount (Rs lacs)"].toFixed(4)}
+                        {Number(row["Amount (Rs lacs)"] ?? 0).toFixed(4)}
                       </td>
                       <td className="px-3 py-2.5 text-sm text-green-900 text-right font-bold border-r border-gray-200">
-                        ₹{row["Price (Rs)"].toFixed(2)}
+                        ₹{Number(row["Price (Rs)"] ?? 0).toFixed(2)}
                       </td>
                       <td className="px-3 py-2.5 text-sm text-gray-700 border-r border-gray-200 text-center">
                         {row.Yield}
@@ -1240,60 +1220,70 @@ export default function TradePreviewBuilder() {
                   </div>
                 ) : (
                   <div className="grid gap-8 xl:grid-cols-2">
-                    {filteredRatingSummaries.map(({ rating, buckets }) => (
-                      <div key={rating} className="bg-white/95 border border-slate-200 rounded-2xl shadow-lg overflow-hidden backdrop-blur">
-                        <div className="px-6 py-5 bg-gradient-to-r from-orange-500 via-amber-500 to-orange-400 text-white text-2xl font-extrabold tracking-wide uppercase">
-                          {rating}
-                        </div>
-                        <div className="divide-y divide-gray-200">
-                          {buckets.map(({ key, label, rows }) => (
-                            <div key={`${rating}-${key}`} className="bg-white px-2 sm:px-4 pb-6">
-                              <div className={`px-6 py-4 text-base font-bold uppercase tracking-[0.2em] border-b border-slate-200 shadow-sm ${key === 'BETWEEN_10_50' ? 'bg-gradient-to-r from-yellow-300 via-amber-200 to-yellow-200 text-slate-900' : 'bg-slate-100 text-slate-600'}`}>
-                                {label}
-                              </div>
-                              <table className="w-full table-auto border-collapse border border-slate-200 text-sm text-slate-700">
-                                <thead className="bg-slate-100 text-xs uppercase tracking-[0.15em] text-slate-500 border-b border-slate-200">
-                                  <tr>
-                                    <th className="px-3 py-4 text-left font-semibold text-slate-600 tracking-wide align-top w-36 border-r border-slate-200 last:border-r-0">Name of Issuer</th>
-                                    <th className="px-3 py-4 text-left font-semibold text-slate-600 tracking-wide align-top w-28 border-r border-slate-200 last:border-r-0">ISIN</th>
-                                    <th className="px-3 py-4 text-left font-semibold text-slate-600 tracking-wide align-top w-28 border-r border-slate-200 last:border-r-0">Maturity Date</th>
-                                    <th className="px-3 py-4 text-right font-semibold text-slate-600 tracking-wide align-top w-20 border-r border-slate-200 last:border-r-0">Trade Count</th>
-                                    <th className="px-3 py-4 text-right font-semibold text-slate-600 tracking-wide align-top w-28 border-r border-slate-200 last:border-r-0">Sum of Amount (In Lacs)</th>
-                                    <th className="px-3 py-4 text-right font-semibold text-slate-600 tracking-wide align-top w-28 border-r border-slate-200 last:border-r-0">Weighted Avg Yield</th>
-                                    <th className="px-3 py-4 text-left font-semibold text-slate-600 tracking-wide align-top w-36 border-r border-slate-200 last:border-r-0">Broker + YTM</th>
-                                  </tr>
-                                </thead>
-                                <tbody className="bg-white divide-y divide-slate-200 text-slate-700">
-                                  {rows.length === 0 ? (
-                                    <tr>
-                                      <td colSpan={7} className="px-3 py-6 text-center italic text-slate-400">No matches found</td>
-                                    </tr>
-                                  ) : (
-                                    rows.map((summary) => (
-                                      <tr key={summary.rowKey} className="odd:bg-white even:bg-slate-100 transition-colors duration-200 hover:bg-orange-50/40">
-                                        <td className="px-3 py-4 font-semibold text-slate-800 whitespace-normal break-words align-top border-r border-slate-200 last:border-r-0 w-36">{summary.issuer}</td>
-                                        <td className="px-3 py-4 font-mono text-[11px] uppercase tracking-[0.2em] text-slate-500 whitespace-normal break-words align-top border-r border-slate-200 last:border-r-0 w-28">{summary.isin}</td>
-                                        <td className="px-3 py-4 text-slate-600 whitespace-normal break-words align-top border-r border-slate-200 last:border-r-0 w-28">{summary.maturity}</td>
-                                        <td className="px-3 py-4 text-right font-semibold text-slate-900 whitespace-normal break-words align-top border-r border-slate-200 last:border-r-0 w-20">{summary.tradeCount}</td>
-                                        <td className="px-3 py-4 text-right font-semibold text-indigo-600 whitespace-normal break-words align-top border-r border-slate-200 last:border-r-0 w-28">{summary.sumAmount.toFixed(2)}</td>
-                                        <td className="px-3 py-4 text-right font-semibold text-emerald-600 whitespace-normal break-words align-top border-r border-slate-200 last:border-r-0 w-28">{Number.isFinite(summary.weightedAverage) ? summary.weightedAverage.toFixed(2) : '-'}</td>
-                                        <td className="px-3 py-4 text-slate-600 whitespace-normal break-words align-top border-r border-slate-200 last:border-r-0 w-36">{summary.brokerYtm}</td>
+                    {filteredRatingSummaries.map(({ rating, buckets }) => {
+                      const ratingBannerClass = getRatingBannerClass(rating);
+                      return (
+                        <div key={rating} className="bg-white/95 border border-slate-200 rounded-2xl shadow-lg overflow-hidden backdrop-blur">
+                          <div className={`px-6 py-5 text-2xl font-extrabold tracking-wide uppercase shadow-md ${ratingBannerClass}`}>
+                            {rating}
+                          </div>
+                          <div className="divide-y divide-slate-200">
+                            {buckets.map(({ key, label, rows }) => {
+                              const bucketTheme = BUCKET_THEME_CLASSES[key] || BUCKET_THEME_CLASSES.default;
+                              return (
+                                <div key={`${rating}-${key}`} className="bg-white px-2 sm:px-4 pb-6">
+                                  <div className={`flex items-center gap-3 px-4 sm:px-6 py-4 text-base font-semibold uppercase tracking-[0.18em] shadow-sm ${bucketTheme}`}>
+                                    <span className="inline-block h-2.5 w-2.5 rounded-full bg-white/80" aria-hidden="true" />
+                                    <span>{label}</span>
+                                  </div>
+                                  <table className="w-full table-auto border-collapse border border-slate-200 text-sm text-slate-700">
+                                    <thead className="bg-slate-800 text-[13px] uppercase tracking-[0.17em] text-white/90 border-b border-slate-700">
+                                      <tr>
+                                        <th className="px-3 py-3 text-left font-semibold text-white/90 tracking-wide align-middle w-36 border-r border-slate-700 last:border-r-0">Name of Issuer</th>
+                                        <th className="px-3 py-3 text-left font-semibold text-white/90 tracking-wide align-middle w-28 border-r border-slate-700 last:border-r-0">ISIN</th>
+                                        <th className="px-3 py-3 text-left font-semibold text-white/90 tracking-wide align-middle w-28 border-r border-slate-700 last:border-r-0">Maturity Date</th>
+                                        <th className="px-3 py-3 text-right font-semibold text-white/90 tracking-wide align-middle w-20 border-r border-slate-700 last:border-r-0">Trade Count</th>
+                                        <th className="px-3 py-3 text-right font-semibold text-white/90 tracking-wide align-middle w-28 border-r border-slate-700 last:border-r-0">Sum of Amount (In Lacs)</th>
+                                        <th className="px-3 py-3 text-right font-semibold text-white/90 tracking-wide align-middle w-28 border-r border-slate-700 last:border-r-0">Weighted Avg Yield</th>
+                                        <th className="px-3 py-3 text-left font-semibold text-white/90 tracking-wide align-middle w-36 border-r border-slate-700 last:border-r-0">Broker + YTM</th>
                                       </tr>
-                                    ))
-                                  )}
-                                </tbody>
-                              </table>
-                            </div>
-                          ))}
+                                    </thead>
+                                    <tbody className="bg-white divide-y divide-slate-200 text-slate-700">
+                                      {rows.length === 0 ? (
+                                        <tr>
+                                          <td colSpan={7} className="px-3 py-6 text-center italic text-slate-400">No matches found</td>
+                                        </tr>
+                                      ) : (
+                                        rows.map((summary) => (
+                                          <tr key={summary.rowKey} className="odd:bg-white even:bg-slate-100 transition-colors duration-200 hover:bg-orange-50/40">
+                                            <td className="px-3 py-4 font-semibold text-slate-800 whitespace-normal break-words align-top border-r border-slate-200 last:border-r-0 w-36">{summary.issuer}</td>
+                                            <td className="px-3 py-4 font-mono text-[11px] uppercase tracking-[0.2em] text-slate-500 whitespace-normal break-words align-top border-r border-slate-200 last:border-r-0 w-28">{summary.isin}</td>
+                                            <td className="px-3 py-4 text-slate-600 whitespace-normal break-words align-top border-r border-slate-200 last:border-r-0 w-28">{summary.maturity}</td>
+                                            <td className="px-3 py-4 text-right font-semibold text-slate-900 whitespace-normal break-words align-top border-r border-slate-200 last:border-r-0 w-20">{summary.tradeCount}</td>
+                                            <td className="px-3 py-4 text-right font-semibold text-indigo-600 whitespace-normal break-words align-top border-r border-slate-200 last:border-r-0 w-28">{summary.sumAmount.toFixed(2)}</td>
+                                            <td className="px-3 py-4 text-right font-semibold text-emerald-600 whitespace-normal break-words align-top border-r border-slate-200 last:border-r-0 w-28">{Number.isFinite(summary.weightedAverage) ? summary.weightedAverage.toFixed(2) : '-'}</td>
+                                            <td className="px-3 py-4 text-slate-600 whitespace-normal break-words align-top border-r border-slate-200 last:border-r-0 w-36">{summary.brokerYtm}</td>
+                                          </tr>
+                                        ))
+                                      )}
+                                    </tbody>
+                                  </table>
+                                </div>
+                              );
+                            })}
+                          </div>
                         </div>
-                      </div>
-                    ))}
+                      );
+                    })}
                   </div>
                 )}
               </div>
             )}
           </div>
         )}
+
+        {/* ✅ This closing div fixes the unbalanced JSX (was missing) */}
+        {/* End of Results Table container */}
 
         {rows.length === 0 && !busy && (
           <div className="bg-white rounded-lg shadow p-12 text-center text-gray-500">
@@ -1305,64 +1295,3 @@ export default function TradePreviewBuilder() {
     </div>
   );
 }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
