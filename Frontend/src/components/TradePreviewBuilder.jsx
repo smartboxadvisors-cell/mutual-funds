@@ -19,6 +19,13 @@ const FILTER_DEFAULTS = {
   rating: ""
 };
 
+const AMOUNT_BUCKETS = [
+  { key: 'UNDER_10', label: 'Below 10 Lac', min: 0, max: 10 },
+  { key: 'BETWEEN_10_50', label: 'Between 10 Lac to 50 Lac', min: 10, max: 50 },
+  { key: 'BETWEEN_50_100', label: 'Between 50 Lac to 100 Lac', min: 50, max: 100 },
+  { key: 'ABOVE_100', label: 'Above 100 Lac', min: 100, max: Infinity },
+];
+
 // ========== UTILITY FUNCTIONS ==========
 
 const norm = (str) => String(str || "").toLowerCase().replace(/\s+/g, "");
@@ -152,6 +159,20 @@ const rupeesToLacs = (val) => {
   return parseFloat((num / 100000).toFixed(4));
 };
 
+const toNumeric = (value) => {
+  if (value === null || value === undefined) return null;
+  if (typeof value === 'number') {
+    return Number.isFinite(value) ? value : null;
+  }
+  const cleaned = String(value)
+    .replace(/,/g, '')
+    .replace(/[^0-9.+-]/g, '')
+    .trim();
+  if (!cleaned) return null;
+  const parsed = Number(cleaned);
+  return Number.isNaN(parsed) ? null : parsed;
+};
+
 const extractExchangeFromFileName = (fileName = "") => {
   const normalized = String(fileName).toLowerCase();
   if (normalized.includes("nse")) return "NSE";
@@ -190,6 +211,7 @@ export default function TradePreviewBuilder() {
   const [itemsPerPage, setItemsPerPage] = useState(50);
   const headerRowRef = useRef(null);
   const [filterTop, setFilterTop] = useState('0px');
+  const [summarySearch, setSummarySearch] = useState('');
 
   const handleFileInput = (e) => {
     const files = Array.from(e.target.files || []);
@@ -507,6 +529,137 @@ export default function TradePreviewBuilder() {
     window.addEventListener('resize', updateStickyOffsets);
     return () => window.removeEventListener('resize', updateStickyOffsets);
   }, [maxRatingColumns]);
+
+  const ratingSummaries = useMemo(() => {
+    if (filteredRows.length === 0) return [];
+
+    const ratingBucketMap = new Map();
+
+    filteredRows.forEach((row) => {
+      const ratingLabel = (row.RatingParts && row.RatingParts.length ? row.RatingParts[0] : row.Rating || 'Unrated').trim() || 'Unrated';
+      const amountValue = toNumeric(row['Amount (Rs lacs)']);
+      const amount = Number.isFinite(amountValue) ? amountValue : 0;
+      const bucket =
+        AMOUNT_BUCKETS.find((b) => amount >= b.min && amount < b.max) || AMOUNT_BUCKETS[AMOUNT_BUCKETS.length - 1];
+
+      let ratingEntry = ratingBucketMap.get(ratingLabel);
+      if (!ratingEntry) {
+        ratingEntry = new Map();
+        ratingBucketMap.set(ratingLabel, ratingEntry);
+      }
+
+      let bucketEntry = ratingEntry.get(bucket.key);
+      if (!bucketEntry) {
+        bucketEntry = new Map();
+        ratingEntry.set(bucket.key, bucketEntry);
+      }
+
+      const issuer = (row['Issuer details'] || '').trim() || 'Unknown Issuer';
+      const isin = row.ISIN || '-';
+      const maturity = row.Maturity || '-';
+      const compositeKey = `${isin}|${issuer}|${maturity}`;
+
+      let summary = bucketEntry.get(compositeKey);
+      if (!summary) {
+        summary = {
+          issuer,
+          isin,
+          maturity,
+          tradeCount: 0,
+          sumAmount: 0,
+          weightedNumerator: 0,
+          brokerYtmSet: new Set(),
+        };
+        bucketEntry.set(compositeKey, summary);
+      }
+
+      summary.tradeCount += 1;
+      summary.sumAmount += amount;
+
+      const yieldValue = toNumeric(row.Yield);
+      if (yieldValue !== null) {
+        summary.weightedNumerator += yieldValue * amount;
+      }
+
+      const brokerLabel = [row['Deal Type'], row.Yield].filter(Boolean).join(' / ');
+      if (brokerLabel) {
+        summary.brokerYtmSet.add(brokerLabel);
+      }
+    });
+
+    const results = [];
+    for (const [rating, bucketMap] of ratingBucketMap.entries()) {
+      const bucketSummaries = AMOUNT_BUCKETS.map((bucketDef) => {
+        const rowsMap = bucketMap.get(bucketDef.key);
+        const rows = rowsMap
+          ? Array.from(rowsMap.values()).map((entry) => ({
+              issuer: entry.issuer,
+              isin: entry.isin,
+              maturity: entry.maturity,
+              tradeCount: entry.tradeCount,
+              sumAmount: entry.sumAmount,
+              weightedAverage:
+                entry.sumAmount > 0 ? entry.weightedNumerator / entry.sumAmount : null,
+              brokerYtm:
+                entry.brokerYtmSet.size > 0 ? Array.from(entry.brokerYtmSet).join(', ') : '-',
+            }))
+          : [];
+
+        rows.sort((a, b) => {
+          if (b.sumAmount !== a.sumAmount) {
+            return b.sumAmount - a.sumAmount;
+          }
+          const bWeighted = Number.isFinite(b.weightedAverage) ? b.weightedAverage : -Infinity;
+          const aWeighted = Number.isFinite(a.weightedAverage) ? a.weightedAverage : -Infinity;
+          return bWeighted - aWeighted;
+        });
+
+        return { ...bucketDef, rows };
+      });
+
+      if (bucketSummaries.some((bucket) => bucket.rows.length > 0)) {
+        results.push({ rating, buckets: bucketSummaries });
+      }
+    }
+
+    results.sort((a, b) => a.rating.localeCompare(b.rating));
+    return results;
+  }, [filteredRows]);
+
+  const normalizedSummarySearch = summarySearch.trim().toLowerCase();
+
+  const filteredRatingSummaries = useMemo(() => {
+    if (!normalizedSummarySearch) return ratingSummaries;
+
+    return ratingSummaries
+      .map(({ rating, buckets }) => {
+        const filteredBuckets = buckets.map((bucket) => {
+          const rows = bucket.rows.filter((summary) => {
+            const haystack = [
+              rating,
+              bucket.label,
+              summary.issuer,
+              summary.isin,
+              summary.maturity,
+              String(summary.tradeCount),
+              summary.sumAmount.toFixed(2),
+              Number.isFinite(summary.weightedAverage) ? summary.weightedAverage.toFixed(2) : '',
+              summary.brokerYtm,
+            ]
+              .join(' ')
+              .toLowerCase();
+
+            return haystack.includes(normalizedSummarySearch);
+          });
+
+          return { ...bucket, rows };
+        });
+
+        const hasMatches = filteredBuckets.some((bucket) => bucket.rows.length > 0);
+        return hasMatches ? { rating, buckets: filteredBuckets } : null;
+      })
+      .filter(Boolean);
+  }, [ratingSummaries, normalizedSummarySearch]);
 
   // Pagination
   const totalPages = Math.ceil(filteredRows.length / itemsPerPage);
@@ -1041,6 +1194,91 @@ export default function TradePreviewBuilder() {
                 </div>
               </div>
             )}
+
+            {ratingSummaries.length > 0 && (
+              <div className="px-6 py-6 bg-slate-50 border-t border-gray-200">
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between mb-4">
+                  <h3 className="text-lg font-semibold text-gray-800">Aggregated View</h3>
+                  <div className="flex items-center gap-2 w-full sm:w-auto">
+                    <input
+                      type="text"
+                      value={summarySearch}
+                      onChange={(e) => setSummarySearch(e.target.value)}
+                      placeholder="Search aggregated results..."
+                      className="flex-1 sm:flex-initial min-w-[200px] px-3 py-2 border border-gray-300 rounded-md text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                    />
+                    {summarySearch && (
+                      <button
+                        type="button"
+                        onClick={() => setSummarySearch('')}
+                        className="px-3 py-2 text-sm font-medium text-gray-700 border border-gray-300 rounded-md hover:bg-gray-100 transition-colors"
+                      >
+                        Clear
+                      </button>
+                    )}
+                  </div>
+                </div>
+
+                {filteredRatingSummaries.length === 0 ? (
+                  <div className="px-4 py-6 bg-white border border-dashed border-gray-300 text-center text-gray-500 rounded-lg">
+                    {summarySearch
+                      ? `No aggregated results match "${summarySearch}".`
+                      : 'No aggregated data available.'}
+                  </div>
+                ) : (
+                  <div className="space-y-8">
+                    {filteredRatingSummaries.map(({ rating, buckets }) => (
+                      <div key={rating} className="bg-white border border-gray-200 rounded-lg shadow-sm overflow-hidden">
+                        <div className="px-4 py-3 bg-orange-500 text-white font-bold text-lg">
+                          {rating}
+                        </div>
+                        <div className="divide-y divide-gray-200">
+                          {buckets.map(({ key, label, rows }) => (
+                            <div key={`${rating}-${key}`} className="overflow-x-auto">
+                              <div className={`px-4 py-2 ${key === 'BETWEEN_10_50' ? 'bg-yellow-300 text-gray-900 font-semibold' : 'bg-gray-100 text-gray-700 font-semibold'}`}>
+                                {label}
+                              </div>
+                              <table className="min-w-full bg-white text-sm">
+                                <thead className="bg-slate-100 text-xs uppercase text-gray-600 tracking-wide">
+                                  <tr>
+                                    <th className="px-4 py-2 text-left">Name of Issuer</th>
+                                    <th className="px-4 py-2 text-left">ISIN</th>
+                                    <th className="px-4 py-2 text-left">Maturity Date</th>
+                                    <th className="px-4 py-2 text-right">Trade Count</th>
+                                    <th className="px-4 py-2 text-right">Sum of Amount (In Lacs)</th>
+                                    <th className="px-4 py-2 text-right">Weighted Avg Yield</th>
+                                    <th className="px-4 py-2 text-left">Broker + YTM</th>
+                                  </tr>
+                                </thead>
+                                <tbody>
+                                  {rows.length === 0 ? (
+                                    <tr>
+                                      <td colSpan={7} className="px-4 py-3 text-center italic text-gray-500">No matches found</td>
+                                    </tr>
+                                  ) : (
+                                    rows.map((summary) => (
+                                      <tr key={`${summary.isin}-${summary.issuer}`} className="even:bg-slate-50">
+                                        <td className="px-4 py-2 text-gray-800">{summary.issuer}</td>
+                                        <td className="px-4 py-2 font-mono text-xs text-gray-700">{summary.isin}</td>
+                                        <td className="px-4 py-2 text-gray-700">{summary.maturity}</td>
+                                        <td className="px-4 py-2 text-right font-semibold text-gray-900">{summary.tradeCount}</td>
+                                        <td className="px-4 py-2 text-right font-semibold text-blue-700">{summary.sumAmount.toFixed(2)}</td>
+                                        <td className="px-4 py-2 text-right font-semibold text-emerald-700">{Number.isFinite(summary.weightedAverage) ? summary.weightedAverage.toFixed(2) : '-'}</td>
+                                        <td className="px-4 py-2 text-gray-700">{summary.brokerYtm}</td>
+                                      </tr>
+                                    ))
+                                  )}
+                                </tbody>
+                              </table>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
           </div>
         )}
 
@@ -1054,4 +1292,8 @@ export default function TradePreviewBuilder() {
     </div>
   );
 }
+
+
+
+
 
