@@ -1239,45 +1239,45 @@ export default function TradePreviewBuilder() {
                       : 'No aggregated data available.'}
                   </div>
                 ) : (
-                  <div className="space-y-8">
+                  <div className="grid gap-8 xl:grid-cols-2">
                     {filteredRatingSummaries.map(({ rating, buckets }) => (
-                      <div key={rating} className="bg-white border border-gray-200 rounded-lg shadow-sm overflow-hidden">
-                        <div className="px-4 py-3 bg-orange-500 text-white font-bold text-lg">
+                      <div key={rating} className="bg-white/95 border border-slate-200 rounded-2xl shadow-lg overflow-hidden backdrop-blur">
+                        <div className="px-6 py-5 bg-gradient-to-r from-orange-500 via-amber-500 to-orange-400 text-white text-2xl font-extrabold tracking-wide uppercase">
                           {rating}
                         </div>
                         <div className="divide-y divide-gray-200">
                           {buckets.map(({ key, label, rows }) => (
-                            <div key={`${rating}-${key}`} className="overflow-x-auto">
-                              <div className={`px-4 py-2 ${key === 'BETWEEN_10_50' ? 'bg-yellow-300 text-gray-900 font-semibold' : 'bg-gray-100 text-gray-700 font-semibold'}`}>
+                            <div key={`${rating}-${key}`} className="bg-white px-2 sm:px-4 pb-6">
+                              <div className={`px-6 py-4 text-base font-bold uppercase tracking-[0.2em] border-b border-slate-200 shadow-sm ${key === 'BETWEEN_10_50' ? 'bg-gradient-to-r from-yellow-300 via-amber-200 to-yellow-200 text-slate-900' : 'bg-slate-100 text-slate-600'}`}>
                                 {label}
                               </div>
-                              <table className="min-w-full bg-white text-sm">
-                                <thead className="bg-slate-100 text-xs uppercase text-gray-600 tracking-wide">
+                              <table className="w-full table-auto border-collapse border border-slate-200 text-sm text-slate-700">
+                                <thead className="bg-slate-100 text-xs uppercase tracking-[0.15em] text-slate-500 border-b border-slate-200">
                                   <tr>
-                                    <th className="px-4 py-2 text-left">Name of Issuer</th>
-                                    <th className="px-4 py-2 text-left">ISIN</th>
-                                    <th className="px-4 py-2 text-left">Maturity Date</th>
-                                    <th className="px-4 py-2 text-right">Trade Count</th>
-                                    <th className="px-4 py-2 text-right">Sum of Amount (In Lacs)</th>
-                                    <th className="px-4 py-2 text-right">Weighted Avg Yield</th>
-                                    <th className="px-4 py-2 text-left">Broker + YTM</th>
+                                    <th className="px-3 py-4 text-left font-semibold text-slate-600 tracking-wide align-top w-36 border-r border-slate-200 last:border-r-0">Name of Issuer</th>
+                                    <th className="px-3 py-4 text-left font-semibold text-slate-600 tracking-wide align-top w-28 border-r border-slate-200 last:border-r-0">ISIN</th>
+                                    <th className="px-3 py-4 text-left font-semibold text-slate-600 tracking-wide align-top w-28 border-r border-slate-200 last:border-r-0">Maturity Date</th>
+                                    <th className="px-3 py-4 text-right font-semibold text-slate-600 tracking-wide align-top w-20 border-r border-slate-200 last:border-r-0">Trade Count</th>
+                                    <th className="px-3 py-4 text-right font-semibold text-slate-600 tracking-wide align-top w-28 border-r border-slate-200 last:border-r-0">Sum of Amount (In Lacs)</th>
+                                    <th className="px-3 py-4 text-right font-semibold text-slate-600 tracking-wide align-top w-28 border-r border-slate-200 last:border-r-0">Weighted Avg Yield</th>
+                                    <th className="px-3 py-4 text-left font-semibold text-slate-600 tracking-wide align-top w-36 border-r border-slate-200 last:border-r-0">Broker + YTM</th>
                                   </tr>
                                 </thead>
-                                <tbody>
+                                <tbody className="bg-white divide-y divide-slate-200 text-slate-700">
                                   {rows.length === 0 ? (
                                     <tr>
-                                      <td colSpan={7} className="px-4 py-3 text-center italic text-gray-500">No matches found</td>
+                                      <td colSpan={7} className="px-3 py-6 text-center italic text-slate-400">No matches found</td>
                                     </tr>
                                   ) : (
                                     rows.map((summary) => (
-                                      <tr key={summary.rowKey} className="even:bg-slate-50">
-                                        <td className="px-4 py-2 text-gray-800">{summary.issuer}</td>
-                                        <td className="px-4 py-2 font-mono text-xs text-gray-700">{summary.isin}</td>
-                                        <td className="px-4 py-2 text-gray-700">{summary.maturity}</td>
-                                        <td className="px-4 py-2 text-right font-semibold text-gray-900">{summary.tradeCount}</td>
-                                        <td className="px-4 py-2 text-right font-semibold text-blue-700">{summary.sumAmount.toFixed(2)}</td>
-                                        <td className="px-4 py-2 text-right font-semibold text-emerald-700">{Number.isFinite(summary.weightedAverage) ? summary.weightedAverage.toFixed(2) : '-'}</td>
-                                        <td className="px-4 py-2 text-gray-700">{summary.brokerYtm}</td>
+                                      <tr key={summary.rowKey} className="odd:bg-white even:bg-slate-100 transition-colors duration-200 hover:bg-orange-50/40">
+                                        <td className="px-3 py-4 font-semibold text-slate-800 whitespace-normal break-words align-top border-r border-slate-200 last:border-r-0 w-36">{summary.issuer}</td>
+                                        <td className="px-3 py-4 font-mono text-[11px] uppercase tracking-[0.2em] text-slate-500 whitespace-normal break-words align-top border-r border-slate-200 last:border-r-0 w-28">{summary.isin}</td>
+                                        <td className="px-3 py-4 text-slate-600 whitespace-normal break-words align-top border-r border-slate-200 last:border-r-0 w-28">{summary.maturity}</td>
+                                        <td className="px-3 py-4 text-right font-semibold text-slate-900 whitespace-normal break-words align-top border-r border-slate-200 last:border-r-0 w-20">{summary.tradeCount}</td>
+                                        <td className="px-3 py-4 text-right font-semibold text-indigo-600 whitespace-normal break-words align-top border-r border-slate-200 last:border-r-0 w-28">{summary.sumAmount.toFixed(2)}</td>
+                                        <td className="px-3 py-4 text-right font-semibold text-emerald-600 whitespace-normal break-words align-top border-r border-slate-200 last:border-r-0 w-28">{Number.isFinite(summary.weightedAverage) ? summary.weightedAverage.toFixed(2) : '-'}</td>
+                                        <td className="px-3 py-4 text-slate-600 whitespace-normal break-words align-top border-r border-slate-200 last:border-r-0 w-36">{summary.brokerYtm}</td>
                                       </tr>
                                     ))
                                   )}
@@ -1305,6 +1305,53 @@ export default function TradePreviewBuilder() {
     </div>
   );
 }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
