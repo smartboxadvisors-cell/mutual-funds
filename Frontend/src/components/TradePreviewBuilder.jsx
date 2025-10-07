@@ -23,7 +23,9 @@ const AMOUNT_BUCKETS = [
   { key: 'UNDER_10', label: 'Below 10 Lac', min: 0, max: 10 },
   { key: 'BETWEEN_10_50', label: 'Between 10 Lac to 50 Lac', min: 10, max: 50 },
   { key: 'BETWEEN_50_100', label: 'Between 50 Lac to 100 Lac', min: 50, max: 100 },
-  { key: 'ABOVE_100', label: 'Above 100 Lac', min: 100, max: Infinity },
+  { key: 'BETWEEN_100_500', label: 'Between 100 Lac to 500 Lac', min: 100, max: 500 },
+  { key: 'BETWEEN_500_2500', label: 'Between 500 Lac to 2500 Lac', min: 500, max: 2500 },
+  { key: 'ABOVE_2500', label: 'Above 2500 Lac', min: 2500, max: Infinity },
 ];
 
 // ========== UTILITY FUNCTIONS ==========
@@ -171,6 +173,15 @@ const toNumeric = (value) => {
   if (!cleaned) return null;
   const parsed = Number(cleaned);
   return Number.isNaN(parsed) ? null : parsed;
+};
+
+const normalizeRatingGroup = (label = '') => {
+  const upper = String(label || '').toUpperCase();
+  const match = upper.match(/(?:^|\s)([ABCD]{1,3})(?=[+\-\/\s(]|$)/);
+  if (match && match[1]) {
+    return match[1];
+  }
+  return 'UNRATED';
 };
 
 const extractExchangeFromFileName = (fileName = "") => {
@@ -536,7 +547,8 @@ export default function TradePreviewBuilder() {
     const ratingBucketMap = new Map();
 
     filteredRows.forEach((row) => {
-      const ratingLabel = (row.RatingParts && row.RatingParts.length ? row.RatingParts[0] : row.Rating || 'Unrated').trim() || 'Unrated';
+      const rawRatingLabel = (row.RatingParts && row.RatingParts.length ? row.RatingParts[0] : row.Rating || 'Unrated').trim() || 'Unrated';
+      const ratingLabel = normalizeRatingGroup(rawRatingLabel);
       const amountValue = toNumeric(row['Amount (Rs lacs)']);
       const amount = Number.isFinite(amountValue) ? amountValue : 0;
       const bucket =
@@ -592,7 +604,8 @@ export default function TradePreviewBuilder() {
       const bucketSummaries = AMOUNT_BUCKETS.map((bucketDef) => {
         const rowsMap = bucketMap.get(bucketDef.key);
         const rows = rowsMap
-          ? Array.from(rowsMap.values()).map((entry) => ({
+          ? Array.from(rowsMap.entries()).map(([rowKey, entry]) => ({
+              rowKey,
               issuer: entry.issuer,
               isin: entry.isin,
               maturity: entry.maturity,
@@ -1257,7 +1270,7 @@ export default function TradePreviewBuilder() {
                                     </tr>
                                   ) : (
                                     rows.map((summary) => (
-                                      <tr key={`${summary.isin}-${summary.issuer}`} className="even:bg-slate-50">
+                                      <tr key={summary.rowKey} className="even:bg-slate-50">
                                         <td className="px-4 py-2 text-gray-800">{summary.issuer}</td>
                                         <td className="px-4 py-2 font-mono text-xs text-gray-700">{summary.isin}</td>
                                         <td className="px-4 py-2 text-gray-700">{summary.maturity}</td>
@@ -1292,6 +1305,15 @@ export default function TradePreviewBuilder() {
     </div>
   );
 }
+
+
+
+
+
+
+
+
+
 
 
 
