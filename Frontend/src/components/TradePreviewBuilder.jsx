@@ -627,50 +627,50 @@ export default function TradePreviewBuilder() {
                 Showing {startIndex + 1}-{Math.min(endIndex, filteredRows.length)} of {filteredRows.length} {filteredRows.length < rows.length && `(filtered from ${rows.length})`}
               </div>
             </div>
-            <div className="overflow-x-auto overflow-y-auto" style={{ maxHeight: 'calc(100vh - 300px)' }}>
-              <table className="w-full table-fixed border-collapse" style={{ minWidth: '1800px' }}>
+            <div className="overflow-y-auto max-w-full w-full" style={{ maxHeight: 'calc(100vh - 300px)' }}>
+              <table className="w-full table-auto border-collapse">
                 <thead className="bg-gray-100 sticky top-0 z-10">
                   <tr>
-                    <th className="w-28 px-2 py-2 text-left text-xs font-bold text-gray-700 uppercase tracking-wide border-b border-gray-300 border-r border-gray-200">
+                    <th className="px-2 py-2 text-left text-xs font-bold text-gray-700 uppercase tracking-wide border-b border-gray-300 border-r border-gray-200">
                       Exchange
                     </th>
-                    <th className="w-32 px-2 py-2 text-left text-xs font-bold text-gray-700 uppercase tracking-wide border-b border-gray-300 border-r border-gray-200">
+                    <th className="px-2 py-2 text-left text-xs font-bold text-gray-700 uppercase tracking-wide border-b border-gray-300 border-r border-gray-200">
                       Trade Date
                     </th>
-                    <th className="w-28 px-2 py-2 text-left text-xs font-bold text-gray-700 uppercase tracking-wide border-b border-gray-300 border-r border-gray-200">
+                    <th className="px-2 py-2 text-left text-xs font-bold text-gray-700 uppercase tracking-wide border-b border-gray-300 border-r border-gray-200">
                       Trade Time
                     </th>
-                    <th className="w-36 px-2 py-2 text-left text-xs font-bold text-gray-700 uppercase tracking-wide border-b border-gray-300 border-r border-gray-200">
+                    <th className="px-2 py-2 text-left text-xs font-bold text-gray-700 uppercase tracking-wide border-b border-gray-300 border-r border-gray-200">
                       ISIN
                     </th>
-                    <th className="w-80 px-2 py-2 text-left text-xs font-bold text-gray-700 uppercase tracking-wide border-b border-gray-300 border-r border-gray-200">
+                    <th className="px-2 py-2 text-left text-xs font-bold text-gray-700 uppercase tracking-wide border-b border-gray-300 border-r border-gray-200">
                       Issuer Details
                     </th>
-                    <th className="w-32 px-2 py-2 text-left text-xs font-bold text-gray-700 uppercase tracking-wide border-b border-gray-300 border-r border-gray-200">
+                    <th className="px-2 py-2 text-left text-xs font-bold text-gray-700 uppercase tracking-wide border-b border-gray-300 border-r border-gray-200">
                       Maturity
                     </th>
-                    <th className="w-32 px-2 py-2 text-right text-xs font-bold text-gray-700 uppercase tracking-wide border-b border-gray-300 border-r border-gray-200">
+                    <th className="px-2 py-2 text-right text-xs font-bold text-gray-700 uppercase tracking-wide border-b border-gray-300 border-r border-gray-200">
                       Amount (₹ lacs)
                     </th>
-                    <th className="w-28 px-2 py-2 text-right text-xs font-bold text-gray-700 uppercase tracking-wide border-b border-gray-300 border-r border-gray-200">
+                    <th className="px-2 py-2 text-right text-xs font-bold text-gray-700 uppercase tracking-wide border-b border-gray-300 border-r border-gray-200">
                       Price (₹)
                     </th>
-                    <th className="w-24 px-2 py-2 text-center text-xs font-bold text-gray-700 uppercase tracking-wide border-b border-gray-300 border-r border-gray-200">
+                    <th className="px-2 py-2 text-center text-xs font-bold text-gray-700 uppercase tracking-wide border-b border-gray-300 border-r border-gray-200">
                       Yield
                     </th>
-                    <th className="w-32 px-2 py-2 text-left text-xs font-bold text-gray-700 uppercase tracking-wide border-b border-gray-300 border-r border-gray-200">
+                    <th className="px-2 py-2 text-left text-xs font-bold text-gray-700 uppercase tracking-wide border-b border-gray-300 border-r border-gray-200">
                       Status
                     </th>
-                    <th className="w-32 px-2 py-2 text-left text-xs font-bold text-gray-700 uppercase tracking-wide border-b border-gray-300 border-r border-gray-200">
+                    <th className="px-2 py-2 text-left text-xs font-bold text-gray-700 uppercase tracking-wide border-b border-gray-300 border-r border-gray-200">
                       Deal Type
                     </th>
-                    <th className="w-56 px-2 py-2 text-left text-xs font-bold text-gray-700 uppercase tracking-wide border-b border-gray-300">
+                    <th className="px-2 py-2 text-left text-xs font-bold text-gray-700 uppercase tracking-wide border-b border-gray-300">
                       Rating
                     </th>
                   </tr>
                   {/* Filter Row */}
                   <tr className="bg-white">
-                    <th className="w-28 px-2 py-1.5 border-b-2 border-gray-300 border-r border-gray-200">
+                    <th className="px-2 py-1.5 border-b-2 border-gray-300 border-r border-gray-200">
                       <input
                         type="text"
                         value={filters.exchange}
@@ -679,7 +679,7 @@ export default function TradePreviewBuilder() {
                         className="w-full px-2 py-1 text-xs border border-gray-300 rounded focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
                       />
                     </th>
-                    <th className="w-32 px-2 py-1.5 border-b-2 border-gray-300 border-r border-gray-200">
+                    <th className="px-2 py-1.5 border-b-2 border-gray-300 border-r border-gray-200">
                       <input
                         type="text"
                         value={filters.tradeDate}
@@ -688,7 +688,7 @@ export default function TradePreviewBuilder() {
                         className="w-full px-2 py-1 text-xs border border-gray-300 rounded focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
                       />
                     </th>
-                    <th className="w-28 px-2 py-1.5 border-b-2 border-gray-300 border-r border-gray-200">
+                    <th className="px-2 py-1.5 border-b-2 border-gray-300 border-r border-gray-200">
                       <input
                         type="text"
                         value={filters.tradeTime}
@@ -697,7 +697,7 @@ export default function TradePreviewBuilder() {
                         className="w-full px-2 py-1 text-xs border border-gray-300 rounded focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
                       />
                     </th>
-                    <th className="w-36 px-2 py-1.5 border-b-2 border-gray-300 border-r border-gray-200">
+                    <th className="px-2 py-1.5 border-b-2 border-gray-300 border-r border-gray-200">
                       <input
                         type="text"
                         value={filters.isin}
@@ -706,7 +706,7 @@ export default function TradePreviewBuilder() {
                         className="w-full px-2 py-1 text-xs border border-gray-300 rounded focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
                       />
                     </th>
-                    <th className="w-80 px-2 py-1.5 border-b-2 border-gray-300 border-r border-gray-200">
+                    <th className="px-2 py-1.5 border-b-2 border-gray-300 border-r border-gray-200">
                       <input
                         type="text"
                         value={filters.issuerDetails}
@@ -715,7 +715,7 @@ export default function TradePreviewBuilder() {
                         className="w-full px-2 py-1 text-xs border border-gray-300 rounded focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
                       />
                     </th>
-                    <th className="w-32 px-2 py-1.5 border-b-2 border-gray-300 border-r border-gray-200">
+                    <th className="px-2 py-1.5 border-b-2 border-gray-300 border-r border-gray-200">
                       <input
                         type="text"
                         value={filters.maturity}
@@ -724,7 +724,7 @@ export default function TradePreviewBuilder() {
                         className="w-full px-2 py-1 text-xs border border-gray-300 rounded focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
                       />
                     </th>
-                    <th className="w-32 px-2 py-1.5 border-b-2 border-gray-300 border-r border-gray-200">
+                    <th className="px-2 py-1.5 border-b-2 border-gray-300 border-r border-gray-200">
                       <input
                         type="text"
                         value={filters.minAmt}
@@ -733,7 +733,7 @@ export default function TradePreviewBuilder() {
                         className="w-full px-2 py-1 text-xs border border-gray-300 rounded focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
                       />
                     </th>
-                    <th className="w-28 px-2 py-1.5 border-b-2 border-gray-300 border-r border-gray-200">
+                    <th className="px-2 py-1.5 border-b-2 border-gray-300 border-r border-gray-200">
                       <input
                         type="text"
                         value={filters.minPrice}
@@ -742,7 +742,7 @@ export default function TradePreviewBuilder() {
                         className="w-full px-2 py-1 text-xs border border-gray-300 rounded focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
                       />
                     </th>
-                    <th className="w-24 px-2 py-1.5 border-b-2 border-gray-300 border-r border-gray-200">
+                    <th className="px-2 py-1.5 border-b-2 border-gray-300 border-r border-gray-200">
                       <input
                         type="text"
                         value={filters.yield}
@@ -751,7 +751,7 @@ export default function TradePreviewBuilder() {
                         className="w-full px-2 py-1 text-xs border border-gray-300 rounded focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
                       />
                     </th>
-                    <th className="w-32 px-2 py-1.5 border-b-2 border-gray-300 border-r border-gray-200">
+                    <th className="px-2 py-1.5 border-b-2 border-gray-300 border-r border-gray-200">
                       <input
                         type="text"
                         value={filters.status}
@@ -760,7 +760,7 @@ export default function TradePreviewBuilder() {
                         className="w-full px-2 py-1 text-xs border border-gray-300 rounded focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
                       />
                     </th>
-                    <th className="w-32 px-2 py-1.5 border-b-2 border-gray-300 border-r border-gray-200">
+                    <th className="px-2 py-1.5 border-b-2 border-gray-300 border-r border-gray-200">
                       <input
                         type="text"
                         value={filters.dealType}
@@ -769,7 +769,7 @@ export default function TradePreviewBuilder() {
                         className="w-full px-2 py-1 text-xs border border-gray-300 rounded focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
                       />
                     </th>
-                    <th className="w-56 px-2 py-1.5 border-b-2 border-gray-300">
+                    <th className="px-2 py-1.5 border-b-2 border-gray-300">
                       <input
                         type="text"
                         value={filters.rating}
@@ -811,10 +811,10 @@ export default function TradePreviewBuilder() {
                       <td className="px-3 py-2.5 text-sm text-gray-700 border-r border-gray-200 font-mono">
                         {row["Trade Time"]}
                       </td>
-                      <td className="px-3 py-2.5 text-xs text-gray-900 font-mono border-r border-gray-200 truncate bg-gray-50" title={row.ISIN}>
+                      <td className="px-3 py-2.5 text-xs text-gray-900 font-mono border-r border-gray-200 whitespace-normal break-words bg-gray-50" title={row.ISIN}>
                         {row.ISIN}
                       </td>
-                      <td className="px-3 py-2.5 text-sm text-gray-700 border-r border-gray-200 truncate font-medium" title={row["Issuer details"]}>
+                      <td className="px-3 py-2.5 text-sm text-gray-700 border-r border-gray-200 whitespace-normal break-words font-medium" title={row["Issuer details"]}>
                         {row["Issuer details"]}
                       </td>
                       <td className="px-3 py-2.5 text-sm text-gray-700 border-r border-gray-200">
@@ -849,7 +849,7 @@ export default function TradePreviewBuilder() {
                           {row["Deal Type"]}
                         </span>
                       </td>
-                      <td className="px-3 py-2.5 text-xs text-gray-700 truncate font-semibold" title={row.Rating}>
+                      <td className="px-3 py-2.5 text-xs text-gray-700 whitespace-normal break-words font-semibold" title={row.Rating}>
                         {row.Rating || '-'}
                       </td>
                     </tr>
@@ -973,4 +973,5 @@ export default function TradePreviewBuilder() {
     </div>
   );
 }
+
 
