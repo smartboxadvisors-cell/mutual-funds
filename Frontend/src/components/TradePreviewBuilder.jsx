@@ -2,6 +2,23 @@ import React, { useMemo, useState, useCallback } from "react";
 import * as XLSX from "xlsx";
 import Papa from "papaparse";
 
+const FILTER_DEFAULTS = {
+  exchange: "",
+  tradeDate: "",
+  tradeTime: "",
+  isin: "",
+  issuerDetails: "",
+  maturity: "",
+  minAmt: "",
+  maxAmt: "",
+  minPrice: "",
+  maxPrice: "",
+  yield: "",
+  status: "",
+  dealType: "",
+  rating: ""
+};
+
 // ========== UTILITY FUNCTIONS ==========
 
 const norm = (str) => String(str || "").toLowerCase().replace(/\s+/g, "");
@@ -166,22 +183,7 @@ const detectType = (headers) => {
 export default function TradePreviewBuilder() {
   const [pickedFiles, setPickedFiles] = useState([]);
   const [rows, setRows] = useState([]);
-  const [filters, setFilters] = useState({
-    exchange: "",
-    tradeDate: "",
-    tradeTime: "",
-    isin: "",
-    issuerDetails: "",
-    maturity: "",
-    minAmt: "",
-    maxAmt: "",
-    minPrice: "",
-    maxPrice: "",
-    yield: "",
-    status: "",
-    dealType: "",
-    rating: ""
-  });
+  const [filters, setFilters] = useState(() => ({ ...FILTER_DEFAULTS }));
   const [busy, setBusy] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
   const [currentPage, setCurrentPage] = useState(1);
@@ -212,7 +214,13 @@ export default function TradePreviewBuilder() {
   const clearFiles = () => {
     setPickedFiles([]);
     setRows([]);
+    resetFilters();
   };
+
+  const resetFilters = useCallback(() => {
+    setFilters({ ...FILTER_DEFAULTS });
+    setCurrentPage(1);
+  }, [setFilters, setCurrentPage]);
 
   const parseFile = (file) => {
     return new Promise((resolve, reject) => {
@@ -376,6 +384,14 @@ export default function TradePreviewBuilder() {
           row["Issuer details"] = sec.issuer;
           row.Rating = sec.rating;
         }
+
+        const ratingValue = typeof row.Rating === "string" ? row.Rating.trim() : String(row.Rating || "").trim();
+        const ratingParts = ratingValue
+          ? ratingValue.split(";").map((part) => part.trim()).filter(Boolean)
+          : [];
+
+        row.Rating = ratingValue;
+        row.RatingParts = ratingParts;
       });
 
       // Sort by Trade Date (desc), then Exchange, then ISIN
@@ -463,6 +479,20 @@ export default function TradePreviewBuilder() {
       return true;
     });
   }, [rows, filters]);
+
+  const hasActiveFilters = useMemo(
+    () => Object.entries(filters).some(([key, value]) => value !== FILTER_DEFAULTS[key]),
+    [filters]
+  );
+
+  const maxRatingColumns = useMemo(() => {
+    const maxParts = rows.reduce((max, row) => {
+      const count = Array.isArray(row.RatingParts) ? row.RatingParts.length : 0;
+      return count > max ? count : max;
+    }, 0);
+
+    return Math.max(1, maxParts);
+  }, [rows]);
 
   // Pagination
   const totalPages = Math.ceil(filteredRows.length / itemsPerPage);
@@ -623,8 +653,18 @@ export default function TradePreviewBuilder() {
               <h2 className="text-xl font-bold text-white">
                 📊 Trade Results
               </h2>
-              <div className="text-sm text-blue-100 font-medium bg-white/10 px-4 py-2 rounded-lg backdrop-blur-sm">
-                Showing {startIndex + 1}-{Math.min(endIndex, filteredRows.length)} of {filteredRows.length} {filteredRows.length < rows.length && `(filtered from ${rows.length})`}
+              <div className="flex items-center gap-3">
+                <div className="text-sm text-blue-100 font-medium bg-white/10 px-4 py-2 rounded-lg backdrop-blur-sm">
+                  Showing {startIndex + 1}-{Math.min(endIndex, filteredRows.length)} of {filteredRows.length} {filteredRows.length < rows.length && `(filtered from ${rows.length})`}
+                </div>
+                <button
+                  type="button"
+                  onClick={resetFilters}
+                  disabled={!hasActiveFilters}
+                  className="px-3 py-1.5 text-sm font-semibold text-white border border-white rounded-md bg-white/20 hover:bg-white/30 transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
+                >
+                  Clear Filters
+                </button>
               </div>
             </div>
             <div className="overflow-y-auto max-w-full w-full" style={{ maxHeight: 'calc(100vh - 300px)' }}>
@@ -664,9 +704,14 @@ export default function TradePreviewBuilder() {
                     <th className="px-2 py-2 text-left text-xs font-bold text-gray-700 uppercase tracking-wide border-b border-gray-300 border-r border-gray-200">
                       Deal Type
                     </th>
-                    <th className="px-2 py-2 text-left text-xs font-bold text-gray-700 uppercase tracking-wide border-b border-gray-300">
-                      Rating
-                    </th>
+                    {Array.from({ length: maxRatingColumns }).map((_, idx) => (
+                      <th
+                        key={`rating-header-${idx}`}
+                        className={`px-2 py-2 text-left text-xs font-bold text-gray-700 uppercase tracking-wide border-b border-gray-300 ${idx === maxRatingColumns - 1 ? "" : "border-r border-gray-200"}`}
+                      >
+                        {maxRatingColumns > 1 ? `Rating ${idx + 1}` : "Rating"}
+                      </th>
+                    ))}
                   </tr>
                   {/* Filter Row */}
                   <tr className="bg-white">
@@ -769,21 +814,28 @@ export default function TradePreviewBuilder() {
                         className="w-full px-2 py-1 text-xs border border-gray-300 rounded focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
                       />
                     </th>
-                    <th className="px-2 py-1.5 border-b-2 border-gray-300">
-                      <input
-                        type="text"
-                        value={filters.rating}
-                        onChange={(e) => setFilters({ ...filters, rating: e.target.value })}
-                        placeholder="Filter..."
-                        className="w-full px-2 py-1 text-xs border border-gray-300 rounded focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
-                      />
-                    </th>
+                    {Array.from({ length: maxRatingColumns }).map((_, idx) => (
+                      <th
+                        key={`rating-filter-${idx}`}
+                        className={`px-2 py-1.5 border-b-2 border-gray-300 ${idx === maxRatingColumns - 1 ? "" : "border-r border-gray-200"}`}
+                      >
+                        {idx === 0 ? (
+                          <input
+                            type="text"
+                            value={filters.rating}
+                            onChange={(e) => setFilters({ ...filters, rating: e.target.value })}
+                            placeholder="Filter..."
+                            className="w-full px-2 py-1 text-xs border border-gray-300 rounded focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
+                          />
+                        ) : null}
+                      </th>
+                    ))}
                   </tr>
                 </thead>
                 <tbody className="bg-white">
                   {paginatedRows.length === 0 ? (
                     <tr>
-                      <td colSpan="12" className="px-6 py-12 text-center">
+                      <td colSpan={11 + maxRatingColumns} className="px-6 py-12 text-center">
                         <div className="text-gray-500">
                           <p className="text-lg font-semibold mb-2">No transactions match your filters</p>
                           <p className="text-sm">Try adjusting or clearing the filters above</p>
@@ -849,9 +901,18 @@ export default function TradePreviewBuilder() {
                           {row["Deal Type"]}
                         </span>
                       </td>
-                      <td className="px-3 py-2.5 text-xs text-gray-700 whitespace-normal break-words font-semibold" title={row.Rating}>
-                        {row.Rating || '-'}
-                      </td>
+                      {Array.from({ length: maxRatingColumns }).map((_, ratingIdx) => {
+                        const ratingValue = row.RatingParts?.[ratingIdx] || "";
+                        return (
+                          <td
+                            key={`rating-${i}-${ratingIdx}`}
+                            className={`px-3 py-2.5 text-xs text-gray-700 whitespace-normal break-words font-semibold${ratingIdx === maxRatingColumns - 1 ? "" : " border-r border-gray-200"}`}
+                            title={ratingValue || undefined}
+                          >
+                            {ratingValue || "-"}
+                          </td>
+                        );
+                      })}
                     </tr>
                   )))}
                 </tbody>
