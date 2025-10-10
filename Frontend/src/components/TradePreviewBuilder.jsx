@@ -1,6 +1,8 @@
 import React, { useMemo, useState, useCallback, useRef, useLayoutEffect } from "react";
 import * as XLSX from "xlsx";
 import Papa from "papaparse";
+import "../App.css";
+import "../styles/trade-preview.css";
 
 const FILTER_DEFAULTS = {
   exchange: "",
@@ -199,6 +201,14 @@ const toNumeric = (value) => {
   return Number.isNaN(parsed) ? null : parsed;
 };
 
+const getFileBadgeLabel = (filename = '') => {
+  const lower = filename.toLowerCase();
+  if (lower.endsWith('.csv')) return 'CSV';
+  if (lower.endsWith('.xlsx')) return 'XLSX';
+  if (lower.endsWith('.xls')) return 'XLS';
+  return 'FILE';
+};
+
 const normalizeRatingGroup = (label = '') => {
   const upper = String(label || '').toUpperCase();
   const match = upper.match(/(?:^|\s)([ABCD]{1,3})(?=[+\-\/\s(]|$)/);
@@ -240,11 +250,14 @@ export default function TradePreviewBuilder() {
   const [filters, setFilters] = useState(() => ({ ...FILTER_DEFAULTS }));
   const [busy, setBusy] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
-  const [currentPage, setCurrentPage] = useState(1);
-  const [itemsPerPage, setItemsPerPage] = useState(50);
+  const [batchSize, setBatchSize] = useState(50);
+  const [visibleCount, setVisibleCount] = useState(50);
   const headerRowRef = useRef(null);
+  const tableScrollRef = useRef(null);
+  const sentinelRef = useRef(null);
   const [filterTop, setFilterTop] = useState('0px');
   const [summarySearch, setSummarySearch] = useState('');
+  const filtersSignature = JSON.stringify(filters);
 
   const handleFileInput = (e) => {
     const files = Array.from(e.target.files || []);
@@ -272,12 +285,12 @@ export default function TradePreviewBuilder() {
     setPickedFiles([]);
     setRows([]);
     resetFilters();
+    setVisibleCount(batchSize);
   };
 
   const resetFilters = useCallback(() => {
     setFilters({ ...FILTER_DEFAULTS });
-    setCurrentPage(1);
-  }, [setFilters, setCurrentPage]);
+  }, []);
 
   const parseFile = (file) => {
     return new Promise((resolve, reject) => {
@@ -463,6 +476,7 @@ export default function TradePreviewBuilder() {
       });
 
       setRows(tradeRows);
+      setVisibleCount(Math.min(batchSize, tradeRows.length));
     } catch (err) {
       console.error("Build preview error:", err);
       alert("Error building preview: " + err.message);
@@ -491,7 +505,18 @@ export default function TradePreviewBuilder() {
       if (filters.yield && !row.Yield.toString().toLowerCase().includes(filters.yield.toLowerCase())) return false;
       if (filters.status && !row.Status.toLowerCase().includes(filters.status.toLowerCase())) return false;
       if (filters.dealType && !row["Deal Type"].toLowerCase().includes(filters.dealType.toLowerCase())) return false;
-      if (filters.rating && !row.Rating.toLowerCase().includes(filters.rating.toLowerCase())) return false;
+      if (filters.rating) {
+        const needle = filters.rating.trim().toUpperCase();
+        const tokensSource = Array.isArray(row.RatingParts) && row.RatingParts.length
+          ? row.RatingParts
+          : (row.Rating ? [row.Rating] : []);
+        const ratingTokens = tokensSource
+          .flatMap((token) => String(token).split(/[,\s/]+/))
+          .map((token) => token.replace(/[^A-Z+/-]/gi, "").toUpperCase())
+          .filter(Boolean);
+        const ratingMatches = ratingTokens.some((token) => token.startsWith(needle));
+        if (!ratingMatches) return false;
+      }
 
       return true;
     });
@@ -654,181 +679,248 @@ export default function TradePreviewBuilder() {
       .filter(Boolean);
   }, [ratingSummaries, normalizedSummarySearch]);
 
-  // Pagination
-  const totalPages = Math.ceil(filteredRows.length / itemsPerPage);
-  const startIndex = (currentPage - 1) * itemsPerPage;
-  const endIndex = startIndex + itemsPerPage;
-  const paginatedRows = filteredRows.slice(startIndex, endIndex);
+  const visibleRows = useMemo(
+    () => filteredRows.slice(0, visibleCount),
+    [filteredRows, visibleCount]
+  );
+  const hasMoreRows = visibleCount < filteredRows.length;
 
-  // Reset to page 1 when filters change
   React.useEffect(() => {
-    setCurrentPage(1);
-  }, [filters]);
+    const baseline = filteredRows.length === 0 ? 0 : Math.min(batchSize, filteredRows.length);
+    setVisibleCount(baseline);
+  }, [filtersSignature, batchSize, filteredRows.length]);
 
-  const goToPage = (page) => {
-    setCurrentPage(Math.max(1, Math.min(page, Math.max(1, totalPages))));
-  };
+  React.useEffect(() => {
+    const scrollRoot = tableScrollRef.current;
+    const sentinel = sentinelRef.current;
+    if (!scrollRoot || !sentinel) return;
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        const entry = entries[0];
+        if (entry && entry.isIntersecting) {
+          setVisibleCount((prev) => {
+            if (prev >= filteredRows.length) return prev;
+            return Math.min(prev + batchSize, filteredRows.length);
+          });
+        }
+      },
+      { root: scrollRoot, rootMargin: '0px 0px 120px 0px', threshold: 0.1 }
+    );
+
+    observer.observe(sentinel);
+    return () => observer.disconnect();
+  }, [filteredRows.length, batchSize]);
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-slate-50 p-4 md:p-6">
-      <div className="max-w-[1920px] mx-auto">
+    <div className="tp-page min-h-screen bg-slate-50/80 px-3 py-6 sm:px-6 lg:px-10">
+      <div className="tp-shell mx-auto max-w-[1600px] space-y-6 lg:space-y-8">
         {/* File Upload Section */}
-        <div className="bg-white rounded-xl shadow-lg border border-blue-100 p-6 mb-6">
-          <div className="mb-4">
-            <h3 className="text-xl font-bold text-gray-800">📊 Upload Trading Files</h3>
-            <p className="text-sm text-gray-600">
-              Upload BSE, NSE trade files and securities master list (.csv, .xlsx, .xls)
-            </p>
-          </div>
-          
-          <div
-            className={`relative border-2 border-dashed rounded-xl p-12 text-center transition-all duration-300 ${
-              isDragging 
-                ? "border-blue-500 bg-gradient-to-br from-blue-50 to-indigo-50 shadow-inner scale-[1.01]" 
-                : "border-gray-300 bg-gradient-to-br from-gray-50 to-slate-50 hover:border-blue-400 hover:bg-blue-50/30"
-            }`}
-            onDrop={handleDrop}
-            onDragOver={handleDragOver}
-            onDragLeave={handleDragLeave}
-          >
-            <input
-              type="file"
-              multiple
-              accept=".csv,.xlsx,.xls"
-              onChange={handleFileInput}
-              className="hidden"
-              id="file-input"
-            />
-            
-            <input
-              type="file"
-              multiple
-              webkitdirectory="true"
-              directory="true"
-              accept=".csv,.xlsx,.xls"
-              onChange={handleFileInput}
-              className="hidden"
-              id="folder-input"
-            />
-            
-            <div className="space-y-4">
-              {/* Text Content */}
-              <p className="text-base font-medium text-gray-700 mb-2">
-                📎 Drag & drop files or folders here
+        <section className="tp-card tp-upload-card flex flex-col gap-6 rounded-2xl border border-blue-100/70 bg-white p-5 shadow-xl sm:p-6 lg:p-8">
+          <header className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <h3 className="flex items-center gap-3 text-2xl font-bold text-slate-800">
+                <span className="inline-flex h-11 w-11 items-center justify-center rounded-full bg-blue-100 text-2xl text-blue-600" aria-hidden="true">
+                  📂
+                </span>
+                Upload Trading Files
+              </h3>
+              <p className="mt-1 text-sm text-gray-600">
+                Upload BSE, NSE trade files and securities master list (.csv, .xlsx, .xls)
               </p>
-              <p className="text-sm text-gray-500 mb-4">or</p>
-              
-              {/* Buttons */}
-              <div className="flex justify-center gap-3">
-                <label 
-                  htmlFor="file-input"
-                  className="cursor-pointer inline-flex items-center gap-2 px-6 py-3 bg-gradient-to-r from-blue-600 to-blue-700 text-white font-semibold rounded-lg hover:from-blue-700 hover:to-blue-800 transition-all duration-200 shadow-md hover:shadow-lg transform hover:scale-105"
-                >
-                  📁 Select Files
-                </label>
-                <label 
-                  htmlFor="folder-input"
-                  className="cursor-pointer inline-flex items-center gap-2 px-6 py-3 bg-gradient-to-r from-green-600 to-green-700 text-white font-semibold rounded-lg hover:from-green-700 hover:to-green-800 transition-all duration-200 shadow-md hover:shadow-lg transform hover:scale-105"
-                >
-                  📂 Select Folder
-                </label>
+            </div>
+          </header>
+
+          <div className="grid gap-6 lg:grid-cols-[minmax(0,1.7fr)_minmax(0,1fr)]">
+            <div className="space-y-4">
+              <div
+                className={`tp-dropzone ${isDragging ? "tp-dropzone--active" : ""} relative flex flex-col items-center justify-center rounded-2xl border-2 border-dashed px-4 py-10 text-center transition-all duration-300 sm:px-8 lg:px-10 ${
+                  isDragging
+                    ? "border-blue-500 bg-gradient-to-br from-blue-50 to-indigo-50 shadow-inner lg:scale-[1.01]"
+                    : "border-slate-300 bg-gradient-to-br from-slate-50 to-white hover:border-blue-400 hover:bg-blue-50/30"
+                }`}
+                onDrop={handleDrop}
+                onDragOver={handleDragOver}
+                onDragLeave={handleDragLeave}
+              >
+                <input
+                  type="file"
+                  multiple
+                  accept=".csv,.xlsx,.xls"
+                  onChange={handleFileInput}
+                  className="hidden"
+                  id="file-input"
+                />
+
+                <input
+                  type="file"
+                  multiple
+                  webkitdirectory="true"
+                  directory="true"
+                  accept=".csv,.xlsx,.xls"
+                  onChange={handleFileInput}
+                  className="hidden"
+                  id="folder-input"
+                />
+
+                <div className="flex flex-col items-center gap-4">
+                  <span className="inline-flex h-12 w-12 items-center justify-center rounded-full bg-blue-100 text-2xl text-blue-600 shadow-sm" aria-hidden="true">⬆</span>
+                  <div className="space-y-1">
+                    <p className="text-base font-semibold text-gray-800">
+                      Drag & drop files or folders here
+                    </p>
+                    <p className="text-sm text-gray-500">
+                      CSV, XLSX, and XLS formats are supported.
+                    </p>
+                  </div>
+                  <div className="flex w-full flex-col items-stretch gap-3 sm:w-auto sm:flex-row sm:justify-center">
+                    <label
+                      htmlFor="file-input"
+                      className="cursor-pointer inline-flex items-center justify-center gap-2 rounded-lg bg-blue-600 px-6 py-3 text-sm font-semibold text-white shadow-md transition-all duration-200 hover:bg-blue-700 hover:shadow-lg focus:outline-none focus:ring-2 focus:ring-blue-400 focus:ring-offset-2"
+                    >
+                      Select Files
+                    </label>
+                    <label
+                      htmlFor="folder-input"
+                      className="cursor-pointer inline-flex items-center justify-center gap-2 rounded-lg bg-emerald-600 px-6 py-3 text-sm font-semibold text-white shadow-md transition-all duration-200 hover:bg-emerald-700 hover:shadow-lg focus:outline-none focus:ring-2 focus:ring-emerald-400 focus:ring-offset-2"
+                    >
+                      Select Folder
+                    </label>
+                  </div>
+                </div>
               </div>
             </div>
-          </div>
-
-          {pickedFiles.length > 0 && (
-            <div className="mt-6 bg-gradient-to-r from-blue-50 via-indigo-50 to-blue-50 rounded-xl p-5 border border-blue-200">
-              <div className="flex justify-between items-center mb-4">
-                <h4 className="text-base font-bold text-gray-800 flex items-center gap-2">
-                  <span className="bg-blue-600 text-white w-7 h-7 rounded-full flex items-center justify-center text-sm font-bold">
-                    {pickedFiles.length}
-                  </span>
-                  Upload Queue
-                </h4>
-                <button
-                  onClick={clearFiles}
-                  className="px-4 py-2 text-sm font-semibold text-red-600 hover:text-white hover:bg-red-600 border-2 border-red-600 rounded-lg transition-all duration-200 transform hover:scale-105"
-                >
-                  🗑️ Clear All
+            <div className="flex flex-col gap-4">
+              {pickedFiles.length > 0 ? (
+                <div className="tp-card tp-queue-card flex h-full flex-col gap-4 rounded-2xl border border-blue-200 bg-white/95 p-4 shadow-md">
+                  <div className="flex flex-wrap items-center justify-between gap-3">
+                    <h4 className="flex items-center gap-2 text-base font-semibold text-slate-800">
+                      <span className="inline-flex h-7 w-7 items-center justify-center rounded-full bg-blue-600 text-xs font-bold text-white">
+                        {pickedFiles.length}
+                      </span>
+                      Upload Queue
+                    </h4>
+                    <button
+                      onClick={clearFiles}
+                      type="button"
+                      className="tp-btn tp-btn--ghost inline-flex items-center gap-2 rounded-lg border border-red-500 px-4 py-2 text-sm font-semibold text-red-600 transition-all duration-200 hover:bg-red-500 hover:text-white focus:outline-none focus:ring-2 focus:ring-red-400 focus:ring-offset-2"
+                    >
+                      Clear All
+                    </button>
+                  </div>
+                  <div className="max-h-64 space-y-2 overflow-y-auto pr-1">
+                    {pickedFiles.map((f, i) => {
+                      const badgeLabel = getFileBadgeLabel(f.name);
+                      return (
+                        <div
+                          key={`${f.name}-${i}`}
+                          className="flex items-center gap-3 rounded-lg border border-blue-100 bg-blue-50/60 p-3 shadow-sm transition-all duration-200 hover:border-blue-200"
+                        >
+                          <div className="flex h-10 w-14 flex-shrink-0 items-center justify-center rounded-md bg-white text-xs font-semibold uppercase text-blue-600 ring-1 ring-inset ring-blue-200">
+                            {badgeLabel}
+                          </div>
+                          <div className="min-w-0 flex-1">
+                            <p className="truncate text-sm font-semibold text-slate-900">{f.name}</p>
+                            <p className="text-xs font-medium text-slate-500">{(f.size / 1024).toFixed(2)} KB</p>
+                          </div>
+                          <span className="flex-shrink-0 rounded-full bg-emerald-100 px-3 py-1 text-xs font-semibold text-emerald-700 ring-1 ring-inset ring-emerald-200">
+                            Ready
+                          </span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                  <button
+                    onClick={buildPreview}
+                    disabled={busy}
+                    type="button"
+                    className="tp-btn tp-btn--primary inline-flex w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-blue-600 via-blue-700 to-indigo-700 px-6 py-3 text-base font-semibold text-white shadow-lg transition-all duration-300 hover:from-blue-700 hover:via-blue-800 hover:to-indigo-800 focus:outline-none focus:ring-2 focus:ring-blue-400 focus:ring-offset-2 disabled:cursor-not-allowed disabled:from-slate-400 disabled:via-slate-500 disabled:to-slate-500"
+                  >
+                    {busy ? (
+                      <>
+                        <span className="inline-flex h-5 w-5 animate-spin rounded-full border-2 border-white/60 border-t-transparent" />
+                        <span>Building Preview...</span>
+                      </>
+                    ) : (
+                      <>
+                        <span aria-hidden="true">→</span>
+                        <span>Build Preview</span>
+                      </>
+                  )}
                 </button>
               </div>
-              
-              <div className="space-y-2 mb-4 max-h-64 overflow-y-auto">
-                {pickedFiles.map((f, i) => (
-                  <div 
-                    key={i} 
-                    className="flex items-center gap-3 bg-white p-3.5 rounded-lg border border-blue-200 shadow-sm hover:shadow-md transition-all duration-200"
-                  >
-                    <div className="flex-shrink-0 text-3xl">
-                      {f.name.endsWith('.csv') ? '📄' : '📊'}
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm font-semibold text-gray-900 truncate">{f.name}</p>
-                      <p className="text-xs text-gray-500 font-medium">{(f.size / 1024).toFixed(2)} KB</p>
-                    </div>
-                    <div className="flex-shrink-0">
-                      <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-bold bg-green-100 text-green-700 border border-green-300">
-                        ✓ Ready
-                      </span>
-                    </div>
-                  </div>
-                ))}
-              </div>
-              
-              <button
-                onClick={buildPreview}
-                disabled={busy}
-                className="w-full bg-gradient-to-r from-blue-600 via-blue-700 to-indigo-700 text-white py-4 px-6 rounded-xl font-bold text-lg hover:from-blue-700 hover:via-blue-800 hover:to-indigo-800 disabled:from-gray-400 disabled:to-gray-500 disabled:cursor-not-allowed shadow-lg hover:shadow-xl transition-all duration-300 transform hover:scale-[1.02] active:scale-[0.98]"
-              >
-                {busy ? (
-                  <span className="flex items-center justify-center gap-3">
-                    <span className="inline-block animate-spin text-2xl">⏳</span>
-                    <span className="font-bold">Building Preview...</span>
-                  </span>
-                ) : (
-                  <span className="flex items-center justify-center gap-2">
-                    🚀 Build Preview
-                  </span>
-                )}
-              </button>
+            ) : (
+                <div className="tp-empty flex h-full min-h-[220px] flex-col items-center justify-center gap-3 rounded-2xl border border-dashed border-slate-200 bg-slate-50 px-6 text-center text-slate-500">
+                  <span className="text-4xl text-slate-300" aria-hidden="true">🗂️</span>
+                  <p className="text-sm font-medium text-slate-700">Upload queue is empty</p>
+                  <p className="text-xs text-slate-400">
+                    Add trade files to organise and review them here.
+                  </p>
+                </div>
+              )}
             </div>
-          )}
+          </div>
 
-          {/* Help Text */}
-          <div className="mt-6 bg-blue-50 border border-blue-200 rounded-lg p-4">
-            <p className="text-sm font-semibold text-blue-900 mb-2">💡 Tips:</p>
-            <ul className="text-sm text-blue-800 space-y-1 ml-4">
-              <li>✅ Upload multiple Excel files at once</li>
-              <li>✅ Select an entire folder containing Excel files</li>
-              <li>✅ Drag & drop files from your file explorer</li>
-              <li>✅ All sheets in each file will be processed automatically</li>
+          <div className="tp-card tp-tips rounded-xl border border-blue-100 bg-blue-50/70 px-4 py-5 sm:px-6">
+            <p className="text-sm font-semibold text-blue-900">Tips</p>
+            <ul className="mt-3 grid gap-3 text-sm text-blue-900 sm:grid-cols-2">
+              <li className="flex items-start gap-2">
+                <span className="mt-0.5 inline-flex h-5 w-5 flex-shrink-0 items-center justify-center rounded-full bg-white text-blue-600 ring-1 ring-inset ring-blue-200" aria-hidden="true">
+                  ✓
+                </span>
+                <span>Upload multiple Excel files at once.</span>
+              </li>
+              <li className="flex items-start gap-2">
+                <span className="mt-0.5 inline-flex h-5 w-5 flex-shrink-0 items-center justify-center rounded-full bg-white text-blue-600 ring-1 ring-inset ring-blue-200" aria-hidden="true">
+                  ✓
+                </span>
+                <span>Select an entire folder containing Excel files.</span>
+              </li>
+              <li className="flex items-start gap-2">
+                <span className="mt-0.5 inline-flex h-5 w-5 flex-shrink-0 items-center justify-center rounded-full bg-white text-blue-600 ring-1 ring-inset ring-blue-200" aria-hidden="true">
+                  ✓
+                </span>
+                <span>Drag & drop files directly from your file explorer.</span>
+              </li>
+              <li className="flex items-start gap-2">
+                <span className="mt-0.5 inline-flex h-5 w-5 flex-shrink-0 items-center justify-center rounded-full bg-white text-blue-600 ring-1 ring-inset ring-blue-200" aria-hidden="true">
+                  ✓
+                </span>
+                <span>All sheets in each workbook will be processed.</span>
+              </li>
             </ul>
           </div>
-        </div>
-
+        </section>
         {/* Results Table */}
         {rows.length > 0 && (
-          <div className="bg-white rounded-xl shadow-xl overflow-hidden border border-blue-100">
-            <div className="bg-gradient-to-r from-blue-600 via-blue-700 to-indigo-700 px-6 py-4 flex justify-between items-center flex-wrap gap-2 shadow-lg">
-              <h2 className="text-xl font-bold text-white">
-                📊 Trade Results
+          <section className="tp-card tp-results-card overflow-hidden rounded-2xl border border-blue-100 bg-white shadow-xl">
+            <header className="tp-results-header flex flex-col gap-3 bg-gradient-to-r from-blue-600 via-blue-700 to-indigo-700 px-4 py-4 text-white shadow-lg sm:flex-row sm:items-center sm:justify-between sm:px-6">
+              <h2 className="tp-results-title flex items-center gap-3 text-xl font-bold">
+                <span className="inline-flex h-9 w-9 items-center justify-center rounded-full bg-white/15 text-lg" aria-hidden="true">
+                  📊
+                </span>
+                Trade Results
               </h2>
-              <div className="flex items-center gap-3">
-                <div className="text-sm text-blue-100 font-medium bg-white/10 px-4 py-2 rounded-lg backdrop-blur-sm">
-                  Showing {startIndex + 1}-{Math.min(endIndex, filteredRows.length)} of {filteredRows.length} {filteredRows.length < rows.length && `(filtered from ${rows.length})`}
+              <div className="flex flex-col gap-2 text-sm sm:flex-row sm:items-center sm:gap-3">
+                <div className="rounded-lg bg-white/10 px-4 py-2 font-medium text-blue-50 backdrop-blur-sm">
+                  Showing {visibleRows.length.toLocaleString()} of {filteredRows.length.toLocaleString()} {filteredRows.length < rows.length && `(filtered from ${rows.length.toLocaleString()})`}
                 </div>
                 <button
                   type="button"
                   onClick={resetFilters}
                   disabled={!hasActiveFilters}
-                  className="px-3 py-1.5 text-sm font-semibold text-white border border-white rounded-md bg-white/20 hover:bg-white/30 transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
+                  className="tp-btn tp-btn--outline inline-flex items-center justify-center rounded-md border border-white/70 px-3 py-1.5 text-sm font-semibold text-white transition-colors hover:bg-white/30 focus:outline-none focus:ring-2 focus:ring-white/60 focus:ring-offset-2 focus:ring-offset-blue-700 disabled:cursor-not-allowed disabled:opacity-60"
                 >
                   Clear Filters
                 </button>
               </div>
-            </div>
-            <div className="overflow-y-auto max-w-full w-full" style={{ maxHeight: 'calc(100vh - 300px)' }}>
-              <table className="w-full table-auto border-collapse">
+            </header>
+            <div className="w-full overflow-x-auto">
+              <div
+                ref={tableScrollRef}
+                className="max-h-[calc(100vh-320px)] overflow-y-auto"
+              >
+                <table className="tp-table min-w-[1200px] w-full table-auto border-collapse">
                 <thead>
                   <tr
                     ref={headerRowRef}
@@ -853,10 +945,10 @@ export default function TradePreviewBuilder() {
                       Maturity
                     </th>
                     <th className="px-2 py-2 text-right text-xs font-bold text-gray-700 uppercase tracking-wide border-b border-gray-300 border-r border-gray-200">
-                      Amount (₹ lacs)
+                      Amount (INR Lacs)
                     </th>
                     <th className="px-2 py-2 text-right text-xs font-bold text-gray-700 uppercase tracking-wide border-b border-gray-300 border-r border-gray-200">
-                      Price (₹)
+                      Price (INR)
                     </th>
                     <th className="px-2 py-2 text-center text-xs font-bold text-gray-700 uppercase tracking-wide border-b border-gray-300 border-r border-gray-200">
                       Yield
@@ -886,7 +978,7 @@ export default function TradePreviewBuilder() {
                         value={filters.exchange}
                         onChange={(e) => setFilters({ ...filters, exchange: e.target.value })}
                         placeholder="Filter..."
-                        className="w-full px-2 py-1 text-xs border border-gray-300 rounded focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
+                        className="tp-input w-full px-2 py-1 text-xs border border-gray-300 rounded focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
                       />
                     </th>
                     <th className="px-2 py-1.5 border-b-2 border-gray-300 border-r border-gray-200">
@@ -895,7 +987,7 @@ export default function TradePreviewBuilder() {
                         value={filters.tradeDate}
                         onChange={(e) => setFilters({ ...filters, tradeDate: e.target.value })}
                         placeholder="Filter..."
-                        className="w-full px-2 py-1 text-xs border border-gray-300 rounded focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
+                        className="tp-input w-full px-2 py-1 text-xs border border-gray-300 rounded focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
                       />
                     </th>
                     <th className="px-2 py-1.5 border-b-2 border-gray-300 border-r border-gray-200">
@@ -904,7 +996,7 @@ export default function TradePreviewBuilder() {
                         value={filters.tradeTime}
                         onChange={(e) => setFilters({ ...filters, tradeTime: e.target.value })}
                         placeholder="Filter..."
-                        className="w-full px-2 py-1 text-xs border border-gray-300 rounded focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
+                        className="tp-input w-full px-2 py-1 text-xs border border-gray-300 rounded focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
                       />
                     </th>
                     <th className="px-2 py-1.5 border-b-2 border-gray-300 border-r border-gray-200">
@@ -913,7 +1005,7 @@ export default function TradePreviewBuilder() {
                         value={filters.isin}
                         onChange={(e) => setFilters({ ...filters, isin: e.target.value })}
                         placeholder="Filter..."
-                        className="w-full px-2 py-1 text-xs border border-gray-300 rounded focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
+                        className="tp-input w-full px-2 py-1 text-xs border border-gray-300 rounded focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
                       />
                     </th>
                     <th className="px-2 py-1.5 border-b-2 border-gray-300 border-r border-gray-200">
@@ -922,7 +1014,7 @@ export default function TradePreviewBuilder() {
                         value={filters.issuerDetails}
                         onChange={(e) => setFilters({ ...filters, issuerDetails: e.target.value })}
                         placeholder="Filter..."
-                        className="w-full px-2 py-1 text-xs border border-gray-300 rounded focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
+                        className="tp-input w-full px-2 py-1 text-xs border border-gray-300 rounded focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
                       />
                     </th>
                     <th className="px-2 py-1.5 border-b-2 border-gray-300 border-r border-gray-200">
@@ -931,7 +1023,7 @@ export default function TradePreviewBuilder() {
                         value={filters.maturity}
                         onChange={(e) => setFilters({ ...filters, maturity: e.target.value })}
                         placeholder="Filter..."
-                        className="w-full px-2 py-1 text-xs border border-gray-300 rounded focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
+                        className="tp-input w-full px-2 py-1 text-xs border border-gray-300 rounded focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
                       />
                     </th>
                     <th className="px-2 py-1.5 border-b-2 border-gray-300 border-r border-gray-200">
@@ -940,7 +1032,7 @@ export default function TradePreviewBuilder() {
                         value={filters.minAmt}
                         onChange={(e) => setFilters({ ...filters, minAmt: e.target.value })}
                         placeholder="Min..."
-                        className="w-full px-2 py-1 text-xs border border-gray-300 rounded focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
+                        className="tp-input w-full px-2 py-1 text-xs border border-gray-300 rounded focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
                       />
                     </th>
                     <th className="px-2 py-1.5 border-b-2 border-gray-300 border-r border-gray-200">
@@ -949,7 +1041,7 @@ export default function TradePreviewBuilder() {
                         value={filters.minPrice}
                         onChange={(e) => setFilters({ ...filters, minPrice: e.target.value })}
                         placeholder="Min..."
-                        className="w-full px-2 py-1 text-xs border border-gray-300 rounded focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
+                        className="tp-input w-full px-2 py-1 text-xs border border-gray-300 rounded focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
                       />
                     </th>
                     <th className="px-2 py-1.5 border-b-2 border-gray-300 border-r border-gray-200">
@@ -958,7 +1050,7 @@ export default function TradePreviewBuilder() {
                         value={filters.yield}
                         onChange={(e) => setFilters({ ...filters, yield: e.target.value })}
                         placeholder="Filter..."
-                        className="w-full px-2 py-1 text-xs border border-gray-300 rounded focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
+                        className="tp-input w-full px-2 py-1 text-xs border border-gray-300 rounded focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
                       />
                     </th>
                     <th className="px-2 py-1.5 border-b-2 border-gray-300 border-r border-gray-200">
@@ -967,7 +1059,7 @@ export default function TradePreviewBuilder() {
                         value={filters.status}
                         onChange={(e) => setFilters({ ...filters, status: e.target.value })}
                         placeholder="Filter..."
-                        className="w-full px-2 py-1 text-xs border border-gray-300 rounded focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
+                        className="tp-input w-full px-2 py-1 text-xs border border-gray-300 rounded focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
                       />
                     </th>
                     <th className="px-2 py-1.5 border-b-2 border-gray-300 border-r border-gray-200">
@@ -976,7 +1068,7 @@ export default function TradePreviewBuilder() {
                         value={filters.dealType}
                         onChange={(e) => setFilters({ ...filters, dealType: e.target.value })}
                         placeholder="Filter..."
-                        className="w-full px-2 py-1 text-xs border border-gray-300 rounded focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
+                        className="tp-input w-full px-2 py-1 text-xs border border-gray-300 rounded focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
                       />
                     </th>
                     {Array.from({ length: maxRatingColumns }).map((_, idx) => (
@@ -990,7 +1082,7 @@ export default function TradePreviewBuilder() {
                             value={filters.rating}
                             onChange={(e) => setFilters({ ...filters, rating: e.target.value })}
                             placeholder="Filter..."
-                            className="w-full px-2 py-1 text-xs border border-gray-300 rounded focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
+                            className="tp-input w-full px-2 py-1 text-xs border border-gray-300 rounded focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
                           />
                         ) : null}
                       </th>
@@ -998,8 +1090,8 @@ export default function TradePreviewBuilder() {
                   </tr>
                 </thead>
 
-                <tbody className="bg-white">
-                  {paginatedRows.length === 0 ? (
+                <tbody className="bg-white divide-y divide-slate-200 text-slate-700">
+                  {visibleRows.length === 0 ? (
                     <tr>
                       <td colSpan={11 + maxRatingColumns} className="px-6 py-12 text-center">
                         <div className="text-gray-500">
@@ -1009,7 +1101,7 @@ export default function TradePreviewBuilder() {
                       </td>
                     </tr>
                   ) : (
-                    paginatedRows.map((row, i) => (
+                    visibleRows.map((row, i) => (
                     <tr 
                       key={i} 
                       className={`border-b border-gray-200 transition-colors hover:bg-blue-50 ${
@@ -1042,7 +1134,7 @@ export default function TradePreviewBuilder() {
                         {Number(row["Amount (Rs lacs)"] ?? 0).toFixed(4)}
                       </td>
                       <td className="px-3 py-2.5 text-sm text-green-900 text-right font-bold border-r border-gray-200">
-                        ₹{Number(row["Price (Rs)"] ?? 0).toFixed(2)}
+                        Rs {Number(row["Price (Rs)"] ?? 0).toFixed(2)}
                       </td>
                       <td className="px-3 py-2.5 text-sm text-gray-700 border-r border-gray-200 text-center">
                         {row.Yield}
@@ -1081,116 +1173,48 @@ export default function TradePreviewBuilder() {
                       })}
                     </tr>
                   )))}
+                  {hasMoreRows && visibleRows.length > 0 && (
+                    <tr ref={sentinelRef}>
+                      <td colSpan={11 + maxRatingColumns} className="tp-loading-row px-3 py-4 text-center text-sm text-gray-500">
+                        Loading more trades...
+                      </td>
+                    </tr>
+                  )}
                 </tbody>
               </table>
             </div>
-            
-            {/* Pagination Controls */}
-            {totalPages > 1 && (
-              <div className="bg-gray-50 px-6 py-4 border-t border-gray-200">
-                <div className="flex flex-col sm:flex-row justify-between items-center gap-4">
-                  {/* Items per page */}
-                  <div className="flex items-center gap-2">
-                    <label className="text-sm text-gray-700 font-medium">Rows per page:</label>
-                    <select
-                      value={itemsPerPage}
-                      onChange={(e) => {
-                        setItemsPerPage(Number(e.target.value));
-                        setCurrentPage(1);
-                      }}
-                      className="px-3 py-1.5 border border-gray-300 rounded-md text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                    >
-                      <option value={25}>25</option>
-                      <option value={50}>50</option>
-                      <option value={100}>100</option>
-                      <option value={200}>200</option>
-                    </select>
-                  </div>
-
-                  {/* Page info and controls */}
-                  <div className="flex items-center gap-3">
-                    <span className="text-sm text-gray-700">
-                      Page <span className="font-semibold">{currentPage}</span> of <span className="font-semibold">{totalPages}</span>
-                    </span>
-                    
-                    <div className="flex gap-1">
-                      {/* First page */}
-                      <button
-                        onClick={() => goToPage(1)}
-                        disabled={currentPage === 1}
-                        className="px-3 py-1.5 border border-gray-300 rounded-md text-sm font-medium text-gray-700 hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-                        title="First page"
-                      >
-                        ««
-                      </button>
-                      
-                      {/* Previous page */}
-                      <button
-                        onClick={() => goToPage(currentPage - 1)}
-                        disabled={currentPage === 1}
-                        className="px-3 py-1.5 border border-gray-300 rounded-md text-sm font-medium text-gray-700 hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-                        title="Previous page"
-                      >
-                        ‹
-                      </button>
-                      
-                      {/* Page numbers */}
-                      {(() => {
-                        const pages = [];
-                        const maxVisible = 5;
-                        let startPage = Math.max(1, currentPage - Math.floor(maxVisible / 2));
-                        let endPage = Math.min(totalPages, startPage + maxVisible - 1);
-                        
-                        if (endPage - startPage < maxVisible - 1) {
-                          startPage = Math.max(1, endPage - maxVisible + 1);
-                        }
-                        
-                        for (let i = startPage; i <= endPage; i++) {
-                          pages.push(
-                            <button
-                              key={i}
-                              onClick={() => goToPage(i)}
-                              className={`px-3 py-1.5 border rounded-md text-sm font-medium transition-colors ${
-                                currentPage === i
-                                  ? 'bg-blue-600 text-white border-blue-600'
-                                  : 'border-gray-300 text-gray-700 hover:bg-gray-100'
-                              }`}
-                            >
-                              {i}
-                            </button>
-                          );
-                        }
-                        return pages;
-                      })()}
-                      
-                      {/* Next page */}
-                      <button
-                        onClick={() => goToPage(currentPage + 1)}
-                        disabled={currentPage === totalPages}
-                        className="px-3 py-1.5 border border-gray-300 rounded-md text-sm font-medium text-gray-700 hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-                        title="Next page"
-                      >
-                        ›
-                      </button>
-                      
-                      {/* Last page */}
-                      <button
-                        onClick={() => goToPage(totalPages)}
-                        disabled={currentPage === totalPages}
-                        className="px-3 py-1.5 border border-gray-300 rounded-md text-sm font-medium text-gray-700 hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-                        title="Last page"
-                      >
-                        »»
-                      </button>
-                    </div>
-                  </div>
-                </div>
+          </div>
+            <div className="tp-load-controls bg-gray-50 px-6 py-4 border-t border-gray-200">
+              <div className="tp-load-controls__row">
+                <span className="tp-load-controls__status">
+                  Showing {visibleRows.length.toLocaleString()} of {filteredRows.length.toLocaleString()} trades
+                </span>
+                <label className="tp-load-controls__batch">
+                  <span>Rows per load:</span>
+                  <select
+                    value={batchSize}
+                    onChange={(e) => {
+                      const nextBatch = Number(e.target.value);
+                      setBatchSize(nextBatch);
+                      setVisibleCount(Math.min(nextBatch, filteredRows.length));
+                    }}
+                    className="tp-input px-3 py-1.5 border border-gray-300 rounded-md text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  >
+                    <option value={25}>25</option>
+                    <option value={50}>50</option>
+                    <option value={100}>100</option>
+                    <option value={200}>200</option>
+                  </select>
+                </label>
               </div>
-            )}
+              {!hasMoreRows && filteredRows.length > 0 && (
+                <p className="tp-load-controls__done">All available trades have been loaded.</p>
+              )}
+            </div>
 
             {ratingSummaries.length > 0 && (
-              <div className="px-6 py-6 bg-slate-50 border-t border-gray-200">
-                <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between mb-4">
+              <div className="tp-card tp-aggregated px-6 py-6 bg-slate-50 border-t border-gray-200">
+                <div className="tp-aggregated-header flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between mb-4">
                   <h3 className="text-lg font-semibold text-gray-800">Aggregated View</h3>
                   <div className="flex items-center gap-2 w-full sm:w-auto">
                     <input
@@ -1198,13 +1222,13 @@ export default function TradePreviewBuilder() {
                       value={summarySearch}
                       onChange={(e) => setSummarySearch(e.target.value)}
                       placeholder="Search aggregated results..."
-                      className="flex-1 sm:flex-initial min-w-[200px] px-3 py-2 border border-gray-300 rounded-md text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                      className="tp-input flex-1 sm:flex-initial min-w-[200px] px-3 py-2 border border-gray-300 rounded-md text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                     />
                     {summarySearch && (
                       <button
                         type="button"
                         onClick={() => setSummarySearch('')}
-                        className="px-3 py-2 text-sm font-medium text-gray-700 border border-gray-300 rounded-md hover:bg-gray-100 transition-colors"
+                        className="tp-btn tp-btn--outline px-3 py-2 text-sm font-medium text-gray-700 border border-gray-300 rounded-md hover:bg-gray-100 transition-colors"
                       >
                         Clear
                       </button>
@@ -1219,11 +1243,11 @@ export default function TradePreviewBuilder() {
                       : 'No aggregated data available.'}
                   </div>
                 ) : (
-                  <div className="grid gap-8 xl:grid-cols-2">
+                  <div className="tp-summary-grid">
                     {filteredRatingSummaries.map(({ rating, buckets }) => {
                       const ratingBannerClass = getRatingBannerClass(rating);
                       return (
-                        <div key={rating} className="bg-white/95 border border-slate-200 rounded-2xl shadow-lg overflow-hidden backdrop-blur">
+                        <div key={rating} className="tp-summary-card bg-white/95 border border-slate-200 rounded-2xl shadow-lg overflow-hidden backdrop-blur">
                           <div className={`px-6 py-5 text-2xl font-extrabold tracking-wide uppercase shadow-md ${ratingBannerClass}`}>
                             {rating}
                           </div>
@@ -1231,43 +1255,45 @@ export default function TradePreviewBuilder() {
                             {buckets.map(({ key, label, rows }) => {
                               const bucketTheme = BUCKET_THEME_CLASSES[key] || BUCKET_THEME_CLASSES.default;
                               return (
-                                <div key={`${rating}-${key}`} className="bg-white px-2 sm:px-4 pb-6">
+                                <div key={`${rating}-${key}`} className="tp-summary-bucket bg-white px-2 sm:px-4 pb-6">
                                   <div className={`flex items-center gap-3 px-4 sm:px-6 py-4 text-base font-semibold uppercase tracking-[0.18em] shadow-sm ${bucketTheme}`}>
                                     <span className="inline-block h-2.5 w-2.5 rounded-full bg-white/80" aria-hidden="true" />
                                     <span>{label}</span>
                                   </div>
-                                  <table className="w-full table-auto border-collapse border border-slate-200 text-sm text-slate-700">
-                                    <thead className="bg-slate-800 text-[13px] uppercase tracking-[0.17em] text-white/90 border-b border-slate-700">
-                                      <tr>
-                                        <th className="px-3 py-3 text-left font-semibold text-white/90 tracking-wide align-middle w-36 border-r border-slate-700 last:border-r-0">Name of Issuer</th>
-                                        <th className="px-3 py-3 text-left font-semibold text-white/90 tracking-wide align-middle w-28 border-r border-slate-700 last:border-r-0">ISIN</th>
-                                        <th className="px-3 py-3 text-left font-semibold text-white/90 tracking-wide align-middle w-28 border-r border-slate-700 last:border-r-0">Maturity Date</th>
-                                        <th className="px-3 py-3 text-right font-semibold text-white/90 tracking-wide align-middle w-20 border-r border-slate-700 last:border-r-0">Trade Count</th>
-                                        <th className="px-3 py-3 text-right font-semibold text-white/90 tracking-wide align-middle w-28 border-r border-slate-700 last:border-r-0">Sum of Amount (In Lacs)</th>
-                                        <th className="px-3 py-3 text-right font-semibold text-white/90 tracking-wide align-middle w-28 border-r border-slate-700 last:border-r-0">Weighted Avg Yield</th>
-                                        <th className="px-3 py-3 text-left font-semibold text-white/90 tracking-wide align-middle w-36 border-r border-slate-700 last:border-r-0">Broker + YTM</th>
-                                      </tr>
-                                    </thead>
-                                    <tbody className="bg-white divide-y divide-slate-200 text-slate-700">
-                                      {rows.length === 0 ? (
+                                  <div className="overflow-x-auto">
+                                    <table className="tp-summary-table min-w-[720px] w-full table-auto border-collapse border border-slate-200 text-sm text-slate-700">
+                                      <thead className="bg-slate-800 text-[13px] uppercase tracking-[0.17em] text-white/90 border-b border-slate-700">
                                         <tr>
-                                          <td colSpan={7} className="px-3 py-6 text-center italic text-slate-400">No matches found</td>
+                                          <th className="px-3 py-3 text-left font-semibold text-white/90 tracking-wide align-middle w-36 border-r border-slate-700 last:border-r-0">Name of Issuer</th>
+                                          <th className="px-3 py-3 text-left font-semibold text-white/90 tracking-wide align-middle w-28 border-r border-slate-700 last:border-r-0">ISIN</th>
+                                          <th className="px-3 py-3 text-left font-semibold text-white/90 tracking-wide align-middle w-28 border-r border-slate-700 last:border-r-0">Maturity Date</th>
+                                          <th className="px-3 py-3 text-right font-semibold text-white/90 tracking-wide align-middle w-20 border-r border-slate-700 last:border-r-0">Trade Count</th>
+                                          <th className="px-3 py-3 text-right font-semibold text-white/90 tracking-wide align-middle w-28 border-r border-slate-700 last:border-r-0">Sum of Amount (INR Lacs)</th>
+                                          <th className="px-3 py-3 text-right font-semibold text-white/90 tracking-wide align-middle w-28 border-r border-slate-700 last:border-r-0">Weighted Avg Yield</th>
+                                          <th className="px-3 py-3 text-left font-semibold text-white/90 tracking-wide align-middle w-36 border-r border-slate-700 last:border-r-0">Broker + YTM</th>
                                         </tr>
-                                      ) : (
-                                        rows.map((summary) => (
-                                          <tr key={summary.rowKey} className="odd:bg-white even:bg-slate-100 transition-colors duration-200 hover:bg-orange-50/40">
-                                            <td className="px-3 py-4 font-semibold text-slate-800 whitespace-normal break-words align-top border-r border-slate-200 last:border-r-0 w-36">{summary.issuer}</td>
-                                            <td className="px-3 py-4 font-mono text-[11px] uppercase tracking-[0.2em] text-slate-500 whitespace-normal break-words align-top border-r border-slate-200 last:border-r-0 w-28">{summary.isin}</td>
-                                            <td className="px-3 py-4 text-slate-600 whitespace-normal break-words align-top border-r border-slate-200 last:border-r-0 w-28">{summary.maturity}</td>
-                                            <td className="px-3 py-4 text-right font-semibold text-slate-900 whitespace-normal break-words align-top border-r border-slate-200 last:border-r-0 w-20">{summary.tradeCount}</td>
-                                            <td className="px-3 py-4 text-right font-semibold text-indigo-600 whitespace-normal break-words align-top border-r border-slate-200 last:border-r-0 w-28">{summary.sumAmount.toFixed(2)}</td>
-                                            <td className="px-3 py-4 text-right font-semibold text-emerald-600 whitespace-normal break-words align-top border-r border-slate-200 last:border-r-0 w-28">{Number.isFinite(summary.weightedAverage) ? summary.weightedAverage.toFixed(2) : '-'}</td>
-                                            <td className="px-3 py-4 text-slate-600 whitespace-normal break-words align-top border-r border-slate-200 last:border-r-0 w-36">{summary.brokerYtm}</td>
+                                      </thead>
+                                      <tbody className="bg-white divide-y divide-slate-200 text-slate-700">
+                                        {rows.length === 0 ? (
+                                          <tr>
+                                            <td colSpan={7} className="px-3 py-6 text-center italic text-slate-400">No matches found</td>
                                           </tr>
-                                        ))
-                                      )}
-                                    </tbody>
-                                  </table>
+                                        ) : (
+                                          rows.map((summary) => (
+                                            <tr key={summary.rowKey} className="odd:bg-white even:bg-slate-100 transition-colors duration-200 hover:bg-orange-50/40">
+                                              <td className="px-3 py-4 font-semibold text-slate-800 whitespace-normal break-words align-top border-r border-slate-200 last:border-r-0 w-36">{summary.issuer}</td>
+                                              <td className="px-3 py-4 font-mono text-[11px] uppercase tracking-[0.2em] text-slate-500 whitespace-normal break-words align-top border-r border-slate-200 last:border-r-0 w-28">{summary.isin}</td>
+                                              <td className="px-3 py-4 text-slate-600 whitespace-normal break-words align-top border-r border-slate-200 last:border-r-0 w-28">{summary.maturity}</td>
+                                              <td className="px-3 py-4 text-right font-semibold text-slate-900 whitespace-normal break-words align-top border-r border-slate-200 last:border-r-0 w-20">{summary.tradeCount}</td>
+                                              <td className="px-3 py-4 text-right font-semibold text-indigo-600 whitespace-normal break-words align-top border-r border-slate-200 last:border-r-0 w-28">{summary.sumAmount.toFixed(2)}</td>
+                                              <td className="px-3 py-4 text-right font-semibold text-emerald-600 whitespace-normal break-words align-top border-r border-slate-200 last:border-r-0 w-28">{Number.isFinite(summary.weightedAverage) ? summary.weightedAverage.toFixed(2) : '-'}</td>
+                                              <td className="px-3 py-4 text-slate-600 whitespace-normal break-words align-top border-r border-slate-200 last:border-r-0 w-36">{summary.brokerYtm}</td>
+                                            </tr>
+                                          ))
+                                        )}
+                                      </tbody>
+                                    </table>
+                                  </div>
                                 </div>
                               );
                             })}
@@ -1279,10 +1305,10 @@ export default function TradePreviewBuilder() {
                 )}
               </div>
             )}
-          </div>
+          </section>
         )}
 
-        {/* ✅ This closing div fixes the unbalanced JSX (was missing) */}
+        {/* This closing section fixes the unbalanced JSX (was missing) */}
         {/* End of Results Table container */}
 
         {rows.length === 0 && !busy && (
