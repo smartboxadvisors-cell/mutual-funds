@@ -649,12 +649,25 @@ export default function TradePreviewBuilder() {
   const filteredRatingSummaries = useMemo(() => {
     if (!normalizedSummarySearch) return ratingSummaries;
 
+    const uppercaseSearch = summarySearch.trim().toUpperCase();
+    const enforceRatingMatch =
+      uppercaseSearch.length > 0 &&
+      uppercaseSearch.length <= 3 &&
+      /^[A-Z+/\\-]+$/.test(uppercaseSearch);
+
     return ratingSummaries
       .map(({ rating, buckets }) => {
+        const ratingUpper = rating.toUpperCase();
+        const ratingMatches = uppercaseSearch.length > 0 && ratingUpper.startsWith(uppercaseSearch);
+
+        if (enforceRatingMatch) {
+          return ratingMatches ? { rating, buckets } : null;
+        }
+
         const filteredBuckets = buckets.map((bucket) => {
           const rows = bucket.rows.filter((summary) => {
             const haystack = [
-              rating,
+              ratingUpper,
               bucket.label,
               summary.issuer,
               summary.isin,
@@ -673,11 +686,19 @@ export default function TradePreviewBuilder() {
           return { ...bucket, rows };
         });
 
-        const hasMatches = filteredBuckets.some((bucket) => bucket.rows.length > 0);
-        return hasMatches ? { rating, buckets: filteredBuckets } : null;
+        const hasRowMatches = filteredBuckets.some((bucket) => bucket.rows.length > 0);
+        const bucketLabelMatches = buckets.some((bucket) =>
+          bucket.label.toLowerCase().includes(normalizedSummarySearch)
+        );
+
+        if (ratingMatches || hasRowMatches || bucketLabelMatches) {
+          return { rating, buckets: filteredBuckets };
+        }
+
+        return null;
       })
       .filter(Boolean);
-  }, [ratingSummaries, normalizedSummarySearch]);
+  }, [ratingSummaries, normalizedSummarySearch, summarySearch]);
 
   const visibleRows = useMemo(
     () => filteredRows.slice(0, visibleCount),
