@@ -779,41 +779,76 @@ function formatBSETradeTime(timeValue) {
 
 // Helper function to format maturity/trade date (convert to DD/MM/YYYY)
 function formatMaturityDate(dateValue) {
-  if (!dateValue) return '';
-  const asNumber = Number(dateValue);
-  if (!Number.isNaN(asNumber) && dateValue !== '' && dateValue !== null) {
-    if (asNumber > 59 && asNumber < 2958465) {
-      const excelEpoch = new Date(Date.UTC(1899, 11, 30));
-      const date = new Date(excelEpoch.getTime() + asNumber * 24 * 60 * 60 * 1000);
-      if (!Number.isNaN(date.getTime())) {
-        const day = String(date.getUTCDate()).padStart(2, '0');
-        const month = String(date.getUTCMonth() + 1).padStart(2, '0');
-        const year = date.getUTCFullYear();
-        return `${day}/${month}/${year}`;
-      }
-    }
+  if (!dateValue && dateValue !== 0) return '';
+
+  const convertExcel = (serial) => {
+    const num = Number(serial);
+    if (Number.isNaN(num)) return null;
+    const whole = Math.floor(num);
+    if (whole <= 59 || whole >= 2958465) return null;
+    const excelEpoch = new Date(Date.UTC(1899, 11, 30));
+    const date = new Date(excelEpoch.getTime() + whole * 24 * 60 * 60 * 1000);
+    return Number.isNaN(date.getTime()) ? null : date;
+  };
+
+  const directNumber = convertExcel(dateValue);
+  if (directNumber) {
+    const dd = String(directNumber.getUTCDate()).padStart(2, '0');
+    const mm = String(directNumber.getUTCMonth() + 1).padStart(2, '0');
+    const yyyy = directNumber.getUTCFullYear();
+    return `${dd}/${mm}/${yyyy}`;
   }
 
   const dateStr = String(dateValue).trim();
   if (!dateStr) return '';
 
   const normalized = dateStr.replace(/[-.]/g, '/');
-  const match = normalized.match(/^(\d{1,2})\/(\d{1,2})\/(\d{2,4})$/);
+  const match = normalized.match(/^(\d{1,2})\/(\d{1,2})\/(\d{2,5})$/);
   if (match) {
     let [, d, m, y] = match;
     if (y.length === 2) {
-      const yearNum = Number(y);
-      y = String(yearNum >= 70 ? 1900 + yearNum : 2000 + yearNum);
+      const shortYear = Number(y);
+      y = String(shortYear >= 70 ? 1900 + shortYear : 2000 + shortYear);
     }
-    return `${d.padStart(2, '0')}/${m.padStart(2, '0')}/${y}`;
+    const dayNum = Number(d);
+    const monthNum = Number(m);
+    const yearNum = Number(y);
+
+    if (!Number.isNaN(yearNum) && yearNum > 4000) {
+      const serialDate = convertExcel(yearNum);
+      if (serialDate) {
+        const dd = String(serialDate.getUTCDate()).padStart(2, '0');
+        const mm = String(serialDate.getUTCMonth() + 1).padStart(2, '0');
+        const yyyy = serialDate.getUTCFullYear();
+        return `${dd}/${mm}/${yyyy}`;
+      }
+    }
+
+    if (
+      Number.isFinite(dayNum) &&
+      Number.isFinite(monthNum) &&
+      Number.isFinite(yearNum) &&
+      monthNum >= 1 &&
+      monthNum <= 12
+    ) {
+      return `${String(dayNum).padStart(2, '0')}/${String(monthNum).padStart(2, '0')}/${String(yearNum).padStart(4, '0')}`;
+    }
   }
 
   const parsed = new Date(dateStr);
   if (!Number.isNaN(parsed.getTime())) {
-    const day = String(parsed.getUTCDate()).padStart(2, '0');
-    const month = String(parsed.getUTCMonth() + 1).padStart(2, '0');
-    const year = parsed.getUTCFullYear();
-    return `${day}/${month}/${year}`;
+    const dd = String(parsed.getUTCDate()).padStart(2, '0');
+    const mm = String(parsed.getUTCMonth() + 1).padStart(2, '0');
+    const yyyy = parsed.getUTCFullYear();
+    return `${dd}/${mm}/${yyyy}`;
+  }
+
+  const fallback = convertExcel(dateStr);
+  if (fallback) {
+    const dd = String(fallback.getUTCDate()).padStart(2, '0');
+    const mm = String(fallback.getUTCMonth() + 1).padStart(2, '0');
+    const yyyy = fallback.getUTCFullYear();
+    return `${dd}/${mm}/${yyyy}`;
   }
 
   return dateStr;

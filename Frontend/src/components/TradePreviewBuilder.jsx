@@ -225,13 +225,22 @@ const toDate = (val) => {
   const str = String(val).trim();
   if (!str) return '';
 
-  const dmyMatch = str.match(/^(\d{1,2})[\/-](\d{1,2})[\/-](\d{2,4})$/);
+  const dmyMatch = str.match(/^(\d{1,2})[\/-](\d{1,2})[\/-](\d{2,5})$/);
   if (dmyMatch) {
     let [, day, month, year] = dmyMatch;
     if (year.length === 2) {
       const yearInt = parseInt(year, 10);
       year = String((yearInt >= 70 ? 1900 : 2000) + yearInt);
     }
+
+    const yearNum = Number(year);
+    if (!Number.isNaN(yearNum) && yearNum > 4000) {
+      const excelDate = excelSerialToDate(yearNum);
+      if (!Number.isNaN(excelDate.getTime())) {
+        return formatDate(excelDate);
+      }
+    }
+
     const parsedDMY = new Date(Date.UTC(Number(year), Number(month) - 1, Number(day)));
     if (!Number.isNaN(parsedDMY.getTime())) {
       return formatDate(parsedDMY);
