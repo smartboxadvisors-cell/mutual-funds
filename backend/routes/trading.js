@@ -1,9 +1,10 @@
 // routes/trading.js
 const express = require('express');
 const multer = require('multer');
-const fs = require('fs');
 const path = require('path');
 const XLSX = require('xlsx');
+const MasterRating = require('../models/MasterRating');
+const TradingTransaction = require('../models/TradingTransaction');
 const router = express.Router();
 
 // Configure multer for file uploads (use memory storage for Vercel)
@@ -27,6 +28,142 @@ const upload = multer({
   }
 });
 
+const RATING_GROUPS = ['AAA', 'AA', 'A', 'BBB', 'BB', 'B'];
+
+let masterRatings = {};
+let masterRatingMeta = {};
+let masterRatingsLoadedAt = null;
+
+function normalizeIsin(value = '') {
+  return String(value || '').trim().toUpperCase();
+}
+
+function computeRatingGroup(input) {
+  if (!input) return 'UNRATED';
+  const normalized = String(input).toUpperCase();
+  const tierMatch = normalized.match(/\b(AAA|AA[+\-]?|A[+\-]?|BBB[+\-]?|BB[+\-]?|B[+\-]?|CCC|CC|C|D)\b/);
+  if (tierMatch) {
+    const token = tierMatch[1].replace(/[+\-]/g, '');
+    if (token.startsWith('AAA')) return 'AAA';
+    if (token.startsWith('AA')) return 'AA';
+    if (token.startsWith('BBB')) return 'BBB';
+    if (token.startsWith('BB')) return 'BB';
+    if (token.startsWith('B')) return 'B';
+    if (token.startsWith('A')) return 'A';
+  }
+  const simpleMatch = normalized.match(/\b([A-D]{1,3})\b/);
+  if (simpleMatch) {
+    const token = simpleMatch[1];
+    if (token.startsWith('AAA')) return 'AAA';
+    if (token.startsWith('AA')) return 'AA';
+    if (token.startsWith('BBB')) return 'BBB';
+    if (token.startsWith('BB')) return 'BB';
+    if (token.startsWith('B')) return 'B';
+    if (token.startsWith('A')) return 'A';
+  }
+  return 'UNRATED';
+}
+
+function parseNumericValue(value) {
+  if (value === null || value === undefined) return null;
+  if (typeof value === 'number') {
+    return Number.isFinite(value) ? value : null;
+  }
+  const cleaned = String(value)
+    .replace(/[,₹]/g, '')
+    .trim();
+  if (!cleaned) return null;
+  const numeric = Number(cleaned);
+  return Number.isFinite(numeric) ? numeric : null;
+}
+
+function parseDateValue(value) {
+  if (!value && value !== 0) return null;
+  if (value instanceof Date) {
+    return Number.isNaN(value.getTime()) ? null : value;
+  }
+  if (typeof value === 'number') {
+    const excelEpoch = new Date(Date.UTC(1899, 11, 30));
+    const msPerDay = 24 * 60 * 60 * 1000;
+    const date = new Date(excelEpoch.getTime() + value * msPerDay);
+    return Number.isNaN(date.getTime()) ? null : date;
+  }
+  const raw = String(value).trim();
+  if (!raw) return null;
+  const normalized = raw.replace(/\./g, '/').replace(/-/g, '/');
+  const dateMatch = normalized.match(
+    /^(\d{1,2})\/(\d{1,2})\/(\d{2,4})(?:\s+(\d{1,2}):(\d{2})(?::(\d{2}))?)?$/
+  );
+  if (dateMatch) {
+    let [, dd, mm, yyyy, hh, min, sec] = dateMatch;
+    let year = Number(yyyy);
+    if (year < 100) {
+      year += year >= 70 ? 1900 : 2000;
+    }
+    const month = Number(mm) - 1;
+    const day = Number(dd);
+    const hours = Number(hh || 0);
+    const minutes = Number(min || 0);
+    const seconds = Number(sec || 0);
+    const candidate = new Date(year, month, day, hours, minutes, seconds);
+    return Number.isNaN(candidate.getTime()) ? null : candidate;
+  }
+  const parsed = new Date(raw);
+  return Number.isNaN(parsed.getTime()) ? null : parsed;
+}
+
+function formatMasterRatingValue(raw) {
+  if (!raw) return '';
+  const formatted = String(raw)
+    .split('()')
+    .map((part) => part.replace(/\s+/g, ' ').trim())
+    .filter(Boolean);
+  return formatted.join(' | ');
+}
+
+async function refreshMasterRatingsCache() {
+  const documents = await MasterRating.find({}).lean();
+  const ratingsMap = {};
+  const metaMap = {};
+  documents.forEach((doc) => {
+    const isin = normalizeIsin(doc.isin);
+    if (!isin) return;
+    const ratingValue = doc.rating || doc.ratingRaw || '';
+    ratingsMap[isin] = ratingValue;
+    metaMap[isin] = {
+      ratingGroup: doc.ratingGroup || computeRatingGroup(ratingValue),
+      masterRatingId: doc._id,
+      issuerName: doc.issuerName || '',
+    };
+  });
+  masterRatings = ratingsMap;
+  masterRatingMeta = metaMap;
+  masterRatingsLoadedAt = new Date();
+}
+
+async function ensureMasterRatingsCache() {
+  if (!masterRatingsLoadedAt) {
+    await refreshMasterRatingsCache();
+    return;
+  }
+  const ageMs = Date.now() - masterRatingsLoadedAt.getTime();
+  if (ageMs > 10 * 60 * 1000) {
+    await refreshMasterRatingsCache();
+  }
+}
+
+function getRatingDetailsForIsin(isin) {
+  const normalized = normalizeIsin(isin);
+  const rating = masterRatings[normalized] || '';
+  const meta = masterRatingMeta[normalized] || {};
+  return {
+    rating,
+    ratingGroup: meta.ratingGroup || computeRatingGroup(rating),
+    masterRatingId: meta.masterRatingId || null,
+    issuerName: meta.issuerName || '',
+  };
+}
+
 // POST /api/trading/upload - Handle CSV and Excel file upload for trading data
 router.post('/upload', upload.single('file'), async (req, res) => {
   try {
@@ -46,7 +183,6 @@ router.post('/upload', upload.single('file'), async (req, res) => {
 
     let rawData = [];
     let exchangeType = 'UNKNOWN';
-    let imported = 0;
     let duplicates = 0;
 
     // Detect exchange type from filename ONLY - priority to exact match
@@ -104,64 +240,125 @@ router.post('/upload', upload.single('file'), async (req, res) => {
       }
     }
 
-    // Process transactions and update portfolio
-    const portfolioUpdates = {};
+    await ensureMasterRatingsCache();
 
-    for (const transaction of results) {
-      const { symbol, type, quantity, price } = transaction;
-
-      if (!portfolioUpdates[symbol]) {
-        portfolioUpdates[symbol] = {
-          symbol,
-          totalQuantity: 0,
-          totalCost: 0,
-          avgPrice: 0,
-          transactions: []
-        };
-      }
-
-      const position = portfolioUpdates[symbol];
-
-      if (type === 'BUY') {
-        // Add to position
-        const newTotalQuantity = position.totalQuantity + quantity;
-        const newTotalCost = position.totalCost + (quantity * price);
-
-        position.totalQuantity = newTotalQuantity;
-        position.totalCost = newTotalCost;
-        position.avgPrice = newTotalQuantity > 0 ? newTotalCost / newTotalQuantity : 0;
-      } else if (type === 'SELL') {
-        // Reduce position
-        position.totalQuantity = Math.max(0, position.totalQuantity - quantity);
-        if (position.totalQuantity === 0) {
-          position.totalCost = 0;
-          position.avgPrice = 0;
-        }
-      }
-
-      position.transactions.push(transaction);
-      imported++;
-    }
-
-    // Count duplicates
+    const now = new Date();
     const seenTransactions = new Set();
+    const transactionsForResponse = [];
+    const bulkOps = [];
+    let duplicatesWithinFile = 0;
+
     for (const transaction of results) {
-      if (seenTransactions.has(transaction.transactionId)) {
-        duplicates++;
-      } else {
-        seenTransactions.add(transaction.transactionId);
+      const transactionKey = transaction.transactionId;
+      if (!transactionKey) {
+        console.log(`Skipping transaction without transactionId at row ${transaction.serialNo || 'unknown'}`);
+        continue;
       }
+
+      if (seenTransactions.has(transactionKey)) {
+        duplicatesWithinFile++;
+        continue;
+      }
+      seenTransactions.add(transactionKey);
+
+      const transactionExchange = transaction.exchange || exchangeType;
+      const normalizedIsin = normalizeIsin(transaction.isin);
+      transaction.isin = normalizedIsin;
+
+      const ratingDetails = getRatingDetailsForIsin(normalizedIsin);
+      if (!transaction.rating && ratingDetails.rating) {
+        transaction.rating = ratingDetails.rating;
+      }
+      transaction.ratingGroup = ratingDetails.ratingGroup;
+      transaction.masterRatingId = ratingDetails.masterRatingId;
+
+      const tradeDateValue = parseDateValue(transaction.tradeDate);
+      const maturityDateValue = parseDateValue(transaction.maturityDate);
+      const settlementDateValue = parseDateValue(transaction.settlementDate);
+      let tradeAmountValue = parseNumericValue(transaction.tradeAmount);
+      if (typeof tradeAmountValue === 'number' && Number.isFinite(tradeAmountValue)) {
+        if (transactionExchange === 'NSE' && tradeAmountValue > 1000) {
+          tradeAmountValue = tradeAmountValue / 100000;
+        }
+      } else {
+        tradeAmountValue = null;
+      }
+      const tradePriceValue = parseNumericValue(transaction.tradePrice);
+      const yieldValue = parseNumericValue(transaction.yield);
+
+      const updatePayload = {
+        exchange: transactionExchange,
+        serialNo: transaction.serialNo || '',
+        isin: normalizedIsin,
+        symbol: transaction.symbol || '',
+        issuerName: transaction.issuerName || ratingDetails.issuerName || '',
+        coupon: transaction.coupon || '',
+        maturityDate: maturityDateValue,
+        tradeDate: tradeDateValue,
+        settlementType: transaction.settlementType || '',
+        tradeAmountRaw: transaction.tradeAmount || '',
+        tradeAmountValue,
+        tradePriceRaw: transaction.tradePrice || '',
+        tradePriceValue,
+        yieldRaw: transaction.yield || '',
+        yieldValue,
+        tradeTime: transaction.tradeTime || '',
+        orderType: transaction.orderType || '',
+        settlementStatus: transaction.settlementStatus || '',
+        settlementDate: settlementDateValue,
+        rating: transaction.rating || '',
+        ratingGroup: transaction.ratingGroup || computeRatingGroup(transaction.rating),
+        masterRatingId: ratingDetails.masterRatingId || null,
+        source: {
+          fileName: originalFileName,
+          exchangeType,
+        },
+        raw: transaction,
+        updatedAt: now,
+      };
+
+      bulkOps.push({
+        updateOne: {
+          filter: { transactionId: transaction.transactionId },
+          update: {
+            $set: updatePayload,
+            $setOnInsert: {
+              createdAt: now,
+              transactionId: transaction.transactionId,
+            },
+          },
+          upsert: true,
+        },
+      });
+
+      transactionsForResponse.push(transaction);
     }
+
+    let bulkResult = {
+      upsertedCount: 0,
+      matchedCount: 0,
+      modifiedCount: 0,
+    };
+
+    if (bulkOps.length > 0) {
+      bulkResult = await TradingTransaction.bulkWrite(bulkOps, { ordered: false });
+    }
+
+    const matchedCount = bulkResult.matchedCount || 0;
+    const modifiedCount = bulkResult.modifiedCount || 0;
+    const upsertedCount = bulkResult.upsertedCount || 0;
+    const duplicatesFromDatabase = Math.max(0, matchedCount - modifiedCount);
+    duplicates = duplicatesWithinFile + duplicatesFromDatabase;
 
     res.json({
       success: true,
-      imported,
+      imported: upsertedCount,
+      updated: modifiedCount,
       duplicates,
       totalProcessed: results.length,
       exchangeType,
-      message: `Successfully imported ${imported} trades from ${exchangeType}, ${duplicates} duplicates skipped`,
-      portfolioUpdates: Object.values(portfolioUpdates),
-      transactions: results // Include transactions for display
+      message: `Stored ${upsertedCount} new trades from ${exchangeType}, updated ${modifiedCount}, ${duplicates} duplicates skipped`,
+      transactions: transactionsForResponse
     });
 
   } catch (error) {
@@ -597,18 +794,18 @@ function transformRowToUnifiedTransaction(row, rowNumber, exchangeType) {
 
     if (exchangeType === 'BSE') {
       // BSE format mapping
-      symbol = row.symbol || '';
-      isin = row.isin || '';
-      issuerName = row.issuerName || '';
-      coupon = row.coupon || '';
+      symbol = String(row.symbol || '').trim();
+      isin = normalizeIsin(row.isin || '');
+      issuerName = String(row.issuerName || '').trim();
+      coupon = String(row.coupon || '').trim();
       maturityDate = formatMaturityDate(row.maturityDate || '');
-      tradeDate = row.dealDate || '';
-      settlementType = row.settlementType || '';
-      tradeAmount = row.tradeAmount || '';
-      tradePrice = row.tradePrice || '';
-      yieldValue = row.yield || '';
+      tradeDate = String(row.dealDate || '').trim();
+      settlementType = String(row.settlementType || '').trim();
+      tradeAmount = String(row.tradeAmount || '').trim();
+      tradePrice = String(row.tradePrice || '').trim();
+      yieldValue = String(row.yield || '').trim();
       tradeTime = formatBSETradeTime(row.tradeTime || '');
-      orderType = row.orderType || '';
+      orderType = String(row.orderType || '').trim();
       
       // Get rating from master list
       rating = masterRatings[isin] || '';
@@ -636,13 +833,13 @@ function transformRowToUnifiedTransaction(row, rowNumber, exchangeType) {
         settlementStatus: '-',
         settlementDate: '-',
         rating,
-        transactionId: `${symbol}_${tradeDate}_${orderType}_${tradeAmount}_${tradePrice}`
+        transactionId: `BSE-${symbol}_${tradeDate}_${orderType}_${tradeAmount}_${tradePrice}`
       };
 
     } else if (exchangeType === 'NSE') {
       // NSE format mapping
-      isin = row.isin || '';
-      issuerName = row.description || '';
+      isin = normalizeIsin(row.isin || '');
+      issuerName = String(row.description || '').trim();
 
       // Extract symbol from description for NSE
       if (issuerName) {
@@ -661,13 +858,13 @@ function transformRowToUnifiedTransaction(row, rowNumber, exchangeType) {
       }
 
       maturityDate = formatMaturityDate(row.maturityDate || '');
-      tradeDate = row.date || '';
-      tradeAmount = row.dealSize || '';
-      tradePrice = row.price || '';
-      yieldValue = row.yield || '';
+      tradeDate = String(row.date || '').trim();
+      tradeAmount = String(row.dealSize || '').trim();
+      tradePrice = String(row.price || '').trim();
+      yieldValue = String(row.yield || '').trim();
       tradeTime = formatNSETradeTime(row.tradeTime || '');
-      settlementStatus = row.settlementStatus || '';
-      settlementDate = row.settlementDate || '';
+      settlementStatus = String(row.settlementStatus || '').trim();
+      settlementDate = String(row.settlementDate || '').trim();
       
       // Get rating from master list
       rating = masterRatings[isin] || '';
@@ -707,7 +904,7 @@ function transformRowToUnifiedTransaction(row, rowNumber, exchangeType) {
         settlementStatus,
         settlementDate,
         rating,
-        transactionId: `${symbol}_${tradeDate}_${orderType}_${tradeAmount}_${tradePrice}`
+        transactionId: `NSE-${symbol}_${tradeDate}_${orderType}_${tradeAmount}_${tradePrice}`
       };
 
     } else {
@@ -754,9 +951,6 @@ function parseCSVLine(line) {
   return result;
 }
 
-// In-memory storage for master ratings (in production, use database)
-let masterRatings = {};
-
 // POST /api/trading/upload-master - Upload master list for ratings
 router.post('/upload-master', upload.single('file'), async (req, res) => {
   try {
@@ -765,56 +959,346 @@ router.post('/upload-master', upload.single('file'), async (req, res) => {
     }
 
     const fileBuffer = req.file.buffer;
-    const fileName = req.file.originalname;
-    const fileExt = path.extname(fileName).toLowerCase();
+    const originalFileName = req.file.originalname;
+    const fileExt = path.extname(originalFileName).toLowerCase();
 
     if (!['.xlsx', '.xls'].includes(fileExt)) {
       return res.status(400).json({ error: 'Only Excel files (.xlsx, .xls) are allowed for master list' });
     }
 
-    // Parse Excel file
     const workbook = XLSX.read(fileBuffer, { type: 'buffer' });
     const sheetName = workbook.SheetNames[0];
     const worksheet = workbook.Sheets[sheetName];
-    const jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1 });
+    const jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1, defval: '' });
 
-    // Parse ratings (assuming column 0 is ISIN, column 1 is Rating)
-    const ratings = {};
-    let processedCount = 0;
+    if (!jsonData || jsonData.length <= 1) {
+      return res.status(400).json({ error: 'No data rows found in master list' });
+    }
 
-    for (let i = 1; i < jsonData.length; i++) { // Skip header row
+    const headerRow = (jsonData[0] || []).map((cell) => String(cell || '').trim());
+    const normalizedHeaders = headerRow.map((header) =>
+      header.toLowerCase().replace(/\s+/g, '').replace(/[^a-z0-9]/g, '')
+    );
+
+    const findColumnIndex = (keywords, fallback) => {
+      for (let i = 0; i < normalizedHeaders.length; i++) {
+        const header = normalizedHeaders[i];
+        if (keywords.some((keyword) => header.includes(keyword))) {
+          return i;
+        }
+      }
+      return typeof fallback === 'number' ? fallback : -1;
+    };
+
+    const isinIdx = findColumnIndex(['isin'], 0);
+    const ratingIdx = findColumnIndex(['rating', 'creditrating'], 1);
+    const issuerIdx = findColumnIndex(['issuer', 'name'], -1);
+
+    if (isinIdx === -1 || ratingIdx === -1) {
+      return res.status(400).json({ error: 'Master list must include ISIN and Rating columns' });
+    }
+
+    const now = new Date();
+    const preparedRecords = [];
+
+    for (let i = 1; i < jsonData.length; i++) {
       const row = jsonData[i];
-      if (!row || row.length < 2) continue;
+      if (!row) continue;
 
-      const isin = String(row[0] || '').trim();
-      const ratingRaw = String(row[1] || '').trim();
+      const rawIsin = row[isinIdx];
+      const normalizedIsin = normalizeIsin(rawIsin);
+      if (!normalizedIsin) continue;
 
-      if (isin && ratingRaw) {
-        // Parse multiple ratings separated by ()
-        const ratingParts = ratingRaw.split('()').map(r => r.trim()).filter(r => r);
-        const formattedRating = ratingParts.join(' | ');
-        
-        ratings[isin] = formattedRating;
-        processedCount++;
+      const rawRating = row[ratingIdx];
+      const ratingRaw = String(rawRating || '').trim();
+      const ratingFormatted = formatMasterRatingValue(ratingRaw);
+      const ratingGroup = computeRatingGroup(ratingFormatted || ratingRaw);
+
+      const issuerName =
+        issuerIdx !== -1 ? String(row[issuerIdx] || '').trim() : '';
+
+      preparedRecords.push({
+        isin: normalizedIsin,
+        issuerName,
+        ratingRaw,
+        rating: ratingFormatted,
+        ratingGroup,
+        rowNumber: i + 1,
+        metadata: { sourceFile: originalFileName, sheetName }
+      });
+    }
+
+    if (preparedRecords.length === 0) {
+      return res.status(400).json({ error: 'No valid ISIN rows found in master list' });
+    }
+
+    const isins = preparedRecords.map((record) => record.isin);
+    const existingDocs = await MasterRating.find({ isin: { $in: isins } }).lean();
+    const existingMap = {};
+    existingDocs.forEach((doc) => {
+      existingMap[doc.isin] = doc;
+    });
+
+    const bulkOps = [];
+    const changedIsins = new Set();
+    let skipped = 0;
+
+    for (const record of preparedRecords) {
+      const existing = existingMap[record.isin];
+      const metadata = {
+        ...(existing?.metadata || {}),
+        sourceFile: record.metadata.sourceFile,
+        sheetName: record.metadata.sheetName,
+        rowNumber: record.rowNumber,
+        lastImportedAt: now,
+      };
+
+      if (existing) {
+        const hasChanges =
+          (existing.ratingRaw || '') !== record.ratingRaw ||
+          (existing.rating || '') !== record.rating ||
+          (existing.ratingGroup || '') !== record.ratingGroup ||
+          (existing.issuerName || '') !== record.issuerName;
+
+        if (!hasChanges) {
+          skipped++;
+          continue;
+        }
+      }
+
+      bulkOps.push({
+        updateOne: {
+          filter: { isin: record.isin },
+          update: {
+            $set: {
+              issuerName: record.issuerName,
+              ratingRaw: record.ratingRaw,
+              rating: record.rating,
+              ratingGroup: record.ratingGroup,
+              metadata,
+              lastSeenAt: now,
+              updatedAt: now,
+            },
+            $setOnInsert: {
+              isin: record.isin,
+              createdAt: now,
+            },
+          },
+          upsert: true,
+        },
+      });
+
+      changedIsins.add(record.isin);
+    }
+
+    let bulkResult = {
+      upsertedCount: 0,
+      modifiedCount: 0,
+    };
+
+    if (bulkOps.length > 0) {
+      bulkResult = await MasterRating.bulkWrite(bulkOps, { ordered: false });
+    }
+
+    if (changedIsins.size > 0) {
+      const changedArray = Array.from(changedIsins);
+      const updatedRatings = await MasterRating.find({ isin: { $in: changedArray } }).lean();
+      const tradeUpdateOps = updatedRatings.map((doc) => {
+        const ratingValue = doc.rating || doc.ratingRaw || '';
+        return {
+          updateMany: {
+            filter: { isin: doc.isin },
+            update: {
+              $set: {
+                rating: ratingValue,
+                ratingGroup: doc.ratingGroup || computeRatingGroup(ratingValue),
+                masterRatingId: doc._id,
+              },
+            },
+          },
+        };
+      });
+      if (tradeUpdateOps.length > 0) {
+        await TradingTransaction.bulkWrite(tradeUpdateOps, { ordered: false });
       }
     }
 
-    // Store in memory (in production, save to database)
-    masterRatings = { ...masterRatings, ...ratings };
+    await refreshMasterRatingsCache();
 
-    console.log(`Master list uploaded: ${processedCount} ratings loaded`);
+    const processedCount = preparedRecords.length;
+    const inserted = bulkResult.upsertedCount || 0;
+    const updated = bulkResult.modifiedCount || 0;
+    const unchanged = Math.max(0, processedCount - inserted - updated);
 
     res.json({
       success: true,
-      message: `Successfully loaded ${processedCount} ratings from master list`,
+      message: `Processed ${processedCount} rows from ${sheetName}. Inserted ${inserted}, updated ${updated}, unchanged ${unchanged}${skipped ? `, skipped ${skipped}` : ''}.`,
+      processedCount,
+      inserted,
+      updated,
+      unchanged,
+      skipped,
       ratings: masterRatings,
-      processedCount
     });
 
   } catch (error) {
     console.error('Master list upload error:', error);
     res.status(500).json({
       error: error.message || 'Failed to process master list'
+    });
+  }
+});
+
+// GET /api/trading/transactions - Fetch stored trades with filters
+router.get('/transactions', async (req, res) => {
+  try {
+    const {
+      rating,
+      ratingGroup,
+      date,
+      startDate,
+      endDate,
+      exchange,
+      limit = '100',
+      page = '1',
+      sort = 'tradeDate',
+      order = 'desc',
+    } = req.query;
+
+    const filters = {};
+    const applied = {};
+
+    const selectedRating = (ratingGroup || rating || '').toString().trim();
+    if (selectedRating) {
+      const normalizedRating = selectedRating.toUpperCase();
+      filters.ratingGroup = normalizedRating;
+      applied.ratingGroup = normalizedRating;
+    }
+
+    const applyDateFilter = (value, bound) => {
+      const parsed = parseDateValue(value);
+      if (!parsed) return null;
+      const dateCopy = new Date(parsed);
+      if (bound === 'start') {
+        dateCopy.setHours(0, 0, 0, 0);
+      } else {
+        dateCopy.setHours(23, 59, 59, 999);
+      }
+      return dateCopy;
+    };
+
+    if (date) {
+      const start = applyDateFilter(date, 'start');
+      const finish = applyDateFilter(date, 'end');
+      if (start && finish) {
+        filters.tradeDate = { $gte: start, $lte: finish };
+        applied.date = {
+          start: start.toISOString(),
+          end: finish.toISOString(),
+        };
+      }
+    } else {
+      const start = applyDateFilter(startDate, 'start');
+      const finish = applyDateFilter(endDate, 'end');
+      if (start || finish) {
+        filters.tradeDate = {};
+        if (start) {
+          filters.tradeDate.$gte = start;
+        }
+        if (finish) {
+          filters.tradeDate.$lte = finish;
+        }
+        applied.dateRange = {
+          ...(start ? { start: start.toISOString() } : {}),
+          ...(finish ? { end: finish.toISOString() } : {}),
+        };
+      }
+    }
+
+    if (exchange) {
+      const normalizedExchange = exchange.toString().trim().toUpperCase();
+      filters.exchange = normalizedExchange;
+      applied.exchange = normalizedExchange;
+    }
+
+    const parsedLimit = Math.min(Math.max(parseInt(limit, 10) || 50, 1), 500);
+    const parsedPage = Math.max(parseInt(page, 10) || 1, 1);
+    const skip = (parsedPage - 1) * parsedLimit;
+
+    const sortableFields = {
+      tradedate: 'tradeDate',
+      tradeamount: 'tradeAmountValue',
+      tradeamountvalue: 'tradeAmountValue',
+      yield: 'yieldValue',
+      yieldvalue: 'yieldValue',
+      createdat: 'createdAt',
+      updatedat: 'updatedAt',
+    };
+
+    const normalizedSort = sort.toString().toLowerCase();
+    const sortField = sortableFields[normalizedSort] || 'tradeDate';
+    const sortOrder = order === 'asc' ? 1 : -1;
+
+    const [items, total, aggregateStats] = await Promise.all([
+      TradingTransaction.find(filters)
+        .sort({ [sortField]: sortOrder, tradeTime: sortOrder })
+        .skip(skip)
+        .limit(parsedLimit)
+        .lean(),
+      TradingTransaction.countDocuments(filters),
+      TradingTransaction.aggregate([
+        { $match: filters },
+        {
+          $group: {
+            _id: null,
+            totalAmount: { $sum: { $ifNull: ['$tradeAmountValue', 0] } },
+            avgYield: { $avg: { $ifNull: ['$yieldValue', null] } },
+            tradeCount: { $sum: 1 },
+          },
+        },
+      ]),
+    ]);
+
+    const summary = aggregateStats[0] || {
+      totalAmount: 0,
+      avgYield: null,
+      tradeCount: 0,
+    };
+
+    const sanitizedItems = items.map((item) => {
+      const { raw, ...rest } = item;
+      return {
+        ...rest,
+        tradeDate: rest.tradeDate,
+        settlementDate: rest.settlementDate,
+        maturityDate: rest.maturityDate,
+        raw,
+      };
+    });
+
+    if (!filters.ratingGroup && !filters.tradeDate) {
+      applied.mode = 'LATEST';
+    }
+
+    res.json({
+      success: true,
+      page: parsedPage,
+      perPage: parsedLimit,
+      total,
+      totalPages: Math.ceil(total / parsedLimit),
+      filtersApplied: applied,
+      summary: {
+        totalAmount: summary.totalAmount,
+        avgYield: summary.avgYield,
+        tradeCount: summary.tradeCount,
+      },
+      data: sanitizedItems,
+      availableRatings: RATING_GROUPS,
+    });
+  } catch (error) {
+    console.error('Trading transactions fetch error:', error);
+    res.status(500).json({
+      error: error.message || 'Failed to fetch transactions',
     });
   }
 });

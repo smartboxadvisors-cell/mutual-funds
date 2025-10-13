@@ -21,6 +21,12 @@ const FILTER_DEFAULTS = {
   rating: ""
 };
 
+const API_BASE = import.meta.env?.VITE_API_URL || "http://localhost:5000/api";
+
+const DB_FETCH_LIMIT = 500;
+
+const RATING_GROUP_OPTIONS = ["AAA", "AA", "A", "BBB", "BB", "B"];
+
 const AMOUNT_BUCKETS = [
   { key: 'UNDER_10', label: 'Below 10 Lac', min: 0, max: 10 },
   { key: 'BETWEEN_10_50', label: 'Between 10 Lac to 50 Lac', min: 10, max: 50 },
@@ -39,6 +45,111 @@ const BUCKET_THEME_CLASSES = {
   ABOVE_2500: 'bg-gradient-to-r from-slate-600 via-slate-700 to-slate-800 text-white',
   default: 'bg-gradient-to-r from-slate-500 via-slate-600 to-slate-700 text-white',
 };
+
+const VIRTUAL_ROW_HEIGHT = 56;
+const VIRTUAL_BUFFER_ROWS = 12;
+const SUMMARY_ROW_HEIGHT = 52;
+const SUMMARY_BUFFER_ROWS = 8;
+
+const VirtualizedSummaryTable = React.memo(function VirtualizedSummaryTable({ rows }) {
+  const scrollRef = React.useRef(null);
+  const [window, setWindow] = React.useState({ start: 0, end: Math.min(rows.length, SUMMARY_BUFFER_ROWS * 3) });
+
+  const computeWindow = React.useCallback(
+    (scrollTop = 0, containerHeight = 0) => {
+      if (rows.length === 0) return { start: 0, end: 0 };
+      const start = Math.max(
+        0,
+        Math.floor(scrollTop / SUMMARY_ROW_HEIGHT) - SUMMARY_BUFFER_ROWS
+      );
+      const end = Math.min(
+        rows.length,
+        Math.ceil((scrollTop + containerHeight) / SUMMARY_ROW_HEIGHT) + SUMMARY_BUFFER_ROWS
+      );
+      return { start, end };
+    },
+    [rows.length]
+  );
+
+  const handleUpdate = React.useCallback(
+    (scrollTop = 0) => {
+      const container = scrollRef.current;
+      const viewport = container ? container.clientHeight : 0;
+      setWindow((prev) => {
+        const next = computeWindow(scrollTop, viewport);
+        return prev.start === next.start && prev.end === next.end ? prev : next;
+      });
+    },
+    [computeWindow]
+  );
+
+  React.useEffect(() => {
+    handleUpdate(0);
+  }, [rows.length, handleUpdate]);
+
+  const visibleRows = React.useMemo(() => {
+    if (window.end <= window.start) return [];
+    return rows.slice(window.start, window.end);
+  }, [rows, window]);
+
+  const topHeight = Math.max(0, window.start * SUMMARY_ROW_HEIGHT);
+  const bottomHeight = Math.max(0, (rows.length - window.end) * SUMMARY_ROW_HEIGHT);
+
+  return (
+    <div className="tp-summary-container">
+      <div
+        ref={scrollRef}
+        className="tp-scroll max-h-[320px] overflow-y-auto"
+        onScroll={(e) => handleUpdate(e.currentTarget.scrollTop)}
+      >
+        <table className="tp-summary-table min-w-[720px] w-full table-auto border-collapse border border-slate-200 text-sm text-slate-700">
+          <thead className="bg-slate-800 text-[13px] uppercase tracking-[0.17em] text-white/90 border-b border-slate-700">
+            <tr>
+              <th className="px-3 py-3 text-left font-semibold text-white/90 tracking-wide align-middle w-36 border-r border-slate-700 last:border-r-0">Name of Issuer</th>
+              <th className="px-3 py-3 text-left font-semibold text-white/90 tracking-wide align-middle w-28 border-r border-slate-700 last:border-r-0">ISIN</th>
+              <th className="px-3 py-3 text-left font-semibold text-white/90 tracking-wide align-middle w-28 border-r border-slate-700 last:border-r-0">Maturity Date</th>
+              <th className="px-3 py-3 text-right font-semibold text-white/90 tracking-wide align-middle w-20 border-r border-slate-700 last:border-r-0">Trade Count</th>
+              <th className="px-3 py-3 text-right font-semibold text-white/90 tracking-wide align-middle w-28 border-r border-slate-700 last:border-r-0">Sum of Amount (INR Lacs)</th>
+              <th className="px-3 py-3 text-right font-semibold text-white/90 tracking-wide align-middle w-28 border-r border-slate-700 last:border-r-0">Weighted Avg Yield</th>
+              <th className="px-3 py-3 text-left font-semibold text-white/90 tracking-wide align-middle w-36 border-r border-slate-700 last:border-r-0">Broker + YTM</th>
+            </tr>
+          </thead>
+          <tbody className="bg-white divide-y divide-slate-200 text-slate-700">
+            {rows.length === 0 ? (
+              <tr>
+                <td colSpan={7} className="px-3 py-6 text-center italic text-slate-400">No matches found</td>
+              </tr>
+            ) : (
+              <>
+                {topHeight > 0 && (
+                  <tr className="tp-virtual-pad" aria-hidden="true" style={{ height: `${topHeight}px` }}>
+                    <td colSpan={7} />
+                  </tr>
+                )}
+                {visibleRows.map((summary) => (
+                  <tr key={summary.rowKey} className="odd:bg-white even:bg-slate-100 transition-colors duration-200 hover:bg-orange-50/40">
+                    <td className="px-3 py-4 font-semibold text-slate-800 whitespace-normal break-words align-top border-r border-slate-200 last:border-r-0 w-36">{summary.issuer}</td>
+                    <td className="px-3 py-4 font-mono tp-isin-summary uppercase text-slate-500 whitespace-normal break-words align-top border-r border-slate-200 last:border-r-0 w-28">{summary.isin}</td>
+                    <td className="px-3 py-4 text-slate-600 whitespace-normal break-words align-top border-r border-slate-200 last:border-r-0 w-28">{summary.maturity}</td>
+                    <td className="px-3 py-4 text-right font-semibold text-slate-900 whitespace-normal break-words align-top border-r border-slate-200 last:border-r-0 w-20">{summary.tradeCount}</td>
+                    <td className="px-3 py-4 text-right font-semibold text-indigo-600 whitespace-normal break-words align-top border-r border-slate-200 last:border-r-0 w-28">{summary.sumAmount.toFixed(2)}</td>
+                    <td className="px-3 py-4 text-right font-semibold text-emerald-600 whitespace-normal break-words align-top border-r border-slate-200 last:border-r-0 w-28">{Number.isFinite(summary.weightedAverage) ? summary.weightedAverage.toFixed(2) : '-'}</td>
+                    <td className="px-3 py-4 text-slate-600 whitespace-normal break-words align-top border-r border-slate-200 last:border-r-0 w-36">{summary.brokerYtm}</td>
+                  </tr>
+                ))}
+                {bottomHeight > 0 && (
+                  <tr className="tp-virtual-pad" aria-hidden="true" style={{ height: `${bottomHeight}px` }}>
+                    <td colSpan={7} />
+                  </tr>
+                )}
+              </>
+            )}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+});
 
 const getRatingBannerClass = (ratingLabel = '') => {
   const normalized = String(ratingLabel || 'UNRATED').toUpperCase();
@@ -91,7 +202,7 @@ const formatDate = (date) => {
   const y = date.getUTCFullYear();
   const m = pad2(date.getUTCMonth() + 1);
   const d = pad2(date.getUTCDate());
-  return `${y}-${m}-${d}`;
+  return `${d}/${m}/${y}`;
 };
 
 const toDate = (val) => {
@@ -218,6 +329,84 @@ const normalizeRatingGroup = (label = '') => {
   return 'UNRATED';
 };
 
+const sortRowsDescending = (rowsList = []) => {
+  rowsList.sort((a, b) => {
+    if (a["Trade Date"] !== b["Trade Date"]) {
+      return b["Trade Date"].localeCompare(a["Trade Date"]);
+    }
+    if (a.Exchange !== b.Exchange) {
+      return a.Exchange.localeCompare(b.Exchange);
+    }
+    return a.ISIN.localeCompare(b.ISIN);
+  });
+};
+
+const mapTransactionToRow = (transaction) => {
+  if (!transaction) return null;
+
+  const exchange = transaction.exchange || transaction.raw?.exchange || '';
+  const tradeDateValue = transaction.tradeDate || transaction.raw?.tradeDate || '';
+  const maturityValue = transaction.maturityDate || transaction.raw?.maturityDate || '';
+
+  let amountValue =
+    typeof transaction.tradeAmountValue === 'number' && !Number.isNaN(transaction.tradeAmountValue)
+      ? transaction.tradeAmountValue
+      : coerceNumber(transaction.tradeAmountRaw || transaction.raw?.tradeAmount);
+  if (amountValue === null || Number.isNaN(amountValue)) {
+    amountValue = 0;
+  }
+  if (exchange === 'NSE' && amountValue > 1000) {
+    amountValue = amountValue / 100000;
+  }
+
+  let priceValue =
+    typeof transaction.tradePriceValue === 'number' && !Number.isNaN(transaction.tradePriceValue)
+      ? transaction.tradePriceValue
+      : coerceNumber(transaction.tradePriceRaw || transaction.raw?.tradePrice);
+  if (priceValue === null || Number.isNaN(priceValue)) {
+    priceValue = 0;
+  }
+
+  let ratingValue = '';
+  if (typeof transaction.rating === 'string' && transaction.rating.trim()) {
+    ratingValue = transaction.rating.trim();
+  } else if (transaction.ratingGroup && transaction.ratingGroup !== 'UNRATED') {
+    ratingValue = transaction.ratingGroup;
+  } else if (typeof transaction.raw?.rating === 'string') {
+    ratingValue = transaction.raw.rating.trim();
+  }
+
+  const ratingParts = ratingValue
+    ? ratingValue.split(';').map((part) => part.trim()).filter(Boolean)
+    : [];
+
+  const yieldValue = (() => {
+    if (transaction.yieldRaw && String(transaction.yieldRaw).trim()) {
+      return String(transaction.yieldRaw).trim();
+    }
+    if (typeof transaction.yieldValue === 'number' && !Number.isNaN(transaction.yieldValue)) {
+      return transaction.yieldValue.toString();
+    }
+    return '';
+  })();
+
+  return {
+    Exchange: exchange || '',
+    "Trade Date": toDate(tradeDateValue) || '',
+    "Trade Time": transaction.tradeTime || '',
+    ISIN: String(transaction.isin || '').toUpperCase(),
+    "Issuer details": transaction.issuerName || '',
+    Maturity: toDate(maturityValue) || '',
+    "Amount (Rs lacs)": Number(amountValue || 0),
+    "Price (Rs)": Number(priceValue || 0),
+    Yield: yieldValue,
+    Status: transaction.settlementStatus || '',
+    "Deal Type": transaction.orderType || '',
+    Rating: ratingValue,
+    RatingParts: ratingParts,
+  };
+};
+
 const extractExchangeFromFileName = (fileName = "") => {
   const normalized = String(fileName).toLowerCase();
   if (normalized.includes("nse")) return "NSE";
@@ -249,15 +438,21 @@ export default function TradePreviewBuilder() {
   const [rows, setRows] = useState([]);
   const [filters, setFilters] = useState(() => ({ ...FILTER_DEFAULTS }));
   const [busy, setBusy] = useState(false);
+  const [usingDatabase, setUsingDatabase] = useState(false);
+  const [dbMeta, setDbMeta] = useState(null);
+  const [lastDbQuery, setLastDbQuery] = useState(null);
   const [isDragging, setIsDragging] = useState(false);
   const [batchSize, setBatchSize] = useState(50);
   const [visibleCount, setVisibleCount] = useState(50);
   const headerRowRef = useRef(null);
   const tableScrollRef = useRef(null);
   const sentinelRef = useRef(null);
+  const [virtualWindow, setVirtualWindow] = useState({ start: 0, end: 0 });
   const [filterTop, setFilterTop] = useState('0px');
   const [summarySearch, setSummarySearch] = useState('');
   const filtersSignature = JSON.stringify(filters);
+  const [ratingsPerPage, setRatingsPerPage] = useState(2);
+  const [ratingPage, setRatingPage] = useState(1);
 
   const handleFileInput = (e) => {
     const files = Array.from(e.target.files || []);
@@ -286,6 +481,9 @@ export default function TradePreviewBuilder() {
     setRows([]);
     resetFilters();
     setVisibleCount(batchSize);
+    setUsingDatabase(false);
+    setDbMeta(null);
+    setLastDbQuery(null);
   };
 
   const resetFilters = useCallback(() => {
@@ -465,18 +663,13 @@ export default function TradePreviewBuilder() {
       });
 
       // Sort by Trade Date (desc), then Exchange, then ISIN
-      tradeRows.sort((a, b) => {
-        if (a["Trade Date"] !== b["Trade Date"]) {
-          return b["Trade Date"].localeCompare(a["Trade Date"]);
-        }
-        if (a.Exchange !== b.Exchange) {
-          return a.Exchange.localeCompare(b.Exchange);
-        }
-        return a.ISIN.localeCompare(b.ISIN);
-      });
+      sortRowsDescending(tradeRows);
 
       setRows(tradeRows);
       setVisibleCount(Math.min(batchSize, tradeRows.length));
+      setUsingDatabase(false);
+      setDbMeta(null);
+      setLastDbQuery(null);
     } catch (err) {
       console.error("Build preview error:", err);
       alert("Error building preview: " + err.message);
@@ -484,6 +677,133 @@ export default function TradePreviewBuilder() {
       setBusy(false);
     }
   };
+
+  const fetchFromDatabase = useCallback(async (options = {}) => {
+    const { allowEmptyFilters = false, initial = false } = options;
+
+    const ratingInput = (filters.rating || '').trim();
+    const tradeDateInput = (filters.tradeDate || '').trim();
+    const exchangeInput = (filters.exchange || '').trim();
+
+    const ratingGroupParam = ratingInput ? normalizeRatingGroup(ratingInput) : '';
+    const exchangeParam = exchangeInput ? exchangeInput.toUpperCase() : '';
+
+    if (!allowEmptyFilters && !ratingGroupParam && !tradeDateInput) {
+      setUsingDatabase(false);
+      setDbMeta({
+        success: false,
+        message: 'Set a Rating (e.g. AAA) or Trade Date filter before fetching from MongoDB.',
+      });
+      return;
+    }
+
+    const params = new URLSearchParams();
+    params.set('page', '1');
+    params.set('limit', String(DB_FETCH_LIMIT));
+    if (ratingGroupParam) params.set('ratingGroup', ratingGroupParam);
+    if (tradeDateInput) params.set('date', tradeDateInput);
+    if (exchangeParam) params.set('exchange', exchangeParam);
+
+    setBusy(true);
+
+    try {
+      const token = localStorage.getItem('token');
+      const response = await fetch(`${API_BASE}/trading/transactions?${params.toString()}`, {
+        headers: {
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+      });
+
+      if (!response.ok) {
+        const text = await response.text();
+        throw new Error(text || `Server error: ${response.status}`);
+      }
+
+      const payload = await response.json();
+      const mappedRows = (payload.data || []).map(mapTransactionToRow).filter(Boolean);
+      sortRowsDescending(mappedRows);
+
+      setRows(mappedRows);
+      setVisibleCount(Math.min(batchSize, mappedRows.length));
+      setUsingDatabase(true);
+      setDbMeta({
+        success: true,
+        fetched: mappedRows.length,
+        total: payload.total || mappedRows.length,
+        summary: payload.summary || null,
+        filtersApplied: payload.filtersApplied || {},
+        availableRatings: payload.availableRatings || [],
+      });
+      setLastDbQuery({
+        ratingGroup: ratingGroupParam,
+        tradeDate: tradeDateInput,
+        exchange: exchangeParam,
+        initial,
+      });
+    } catch (error) {
+      console.error('Trading DB fetch error:', error);
+      setRows([]);
+      setUsingDatabase(true);
+      setDbMeta({
+        success: false,
+        message: error.message || 'Failed to fetch trading data from MongoDB.',
+      });
+    } finally {
+      setBusy(false);
+    }
+  }, [filters.exchange, filters.rating, filters.tradeDate, batchSize]);
+
+  const activeRatingGroup = useMemo(() => {
+    const input = (filters.rating || '').trim();
+    if (!input) return '';
+    return normalizeRatingGroup(input);
+  }, [filters.rating]);
+
+  const normalizedExchangeFilter = useMemo(
+    () => (filters.exchange || '').trim().toUpperCase(),
+    [filters.exchange]
+  );
+
+  const normalizedTradeDateFilter = useMemo(
+    () => (filters.tradeDate || '').trim(),
+    [filters.tradeDate]
+  );
+
+  const dbFiltersChanged = useMemo(() => {
+    if (!usingDatabase || !lastDbQuery) return false;
+    return (
+      (lastDbQuery.ratingGroup || '') !== (activeRatingGroup || '') ||
+      (lastDbQuery.tradeDate || '') !== (normalizedTradeDateFilter || '') ||
+      (lastDbQuery.exchange || '') !== (normalizedExchangeFilter || '')
+    );
+  }, [usingDatabase, lastDbQuery, activeRatingGroup, normalizedTradeDateFilter, normalizedExchangeFilter]);
+
+  React.useEffect(() => {
+    if (!usingDatabase) return;
+    if (!lastDbQuery) return;
+    if (!dbFiltersChanged) return;
+    if (busy) return;
+    const timer = setTimeout(() => {
+      fetchFromDatabase({ allowEmptyFilters: true });
+    }, 400);
+    return () => clearTimeout(timer);
+  }, [usingDatabase, lastDbQuery, dbFiltersChanged, fetchFromDatabase, busy]);
+
+  React.useEffect(() => {
+    fetchFromDatabase({ allowEmptyFilters: true, initial: true });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const handleRatingShortcut = useCallback((code) => {
+    setFilters((prev) => {
+      const current = String(prev.rating || '').trim().toUpperCase();
+      if (!code) {
+        return { ...prev, rating: '' };
+      }
+      const nextRating = current === code ? '' : code;
+      return { ...prev, rating: nextRating };
+    });
+  }, []);
 
   const filteredRows = useMemo(() => {
     return rows.filter((row) => {
@@ -700,16 +1020,77 @@ export default function TradePreviewBuilder() {
       .filter(Boolean);
   }, [ratingSummaries, normalizedSummarySearch, summarySearch]);
 
-  const visibleRows = useMemo(
+  const ratingPages = Math.max(1, Math.ceil(filteredRatingSummaries.length / ratingsPerPage));
+  const currentRatingPage = Math.min(ratingPage, ratingPages);
+  const paginatedRatingSummaries = filteredRatingSummaries.slice(
+    (currentRatingPage - 1) * ratingsPerPage,
+    currentRatingPage * ratingsPerPage
+  );
+
+  const loadedRows = useMemo(
     () => filteredRows.slice(0, visibleCount),
     [filteredRows, visibleCount]
   );
   const hasMoreRows = visibleCount < filteredRows.length;
 
+  const updateVirtualWindow = useCallback(
+    (scrollPos = 0) => {
+      const container = tableScrollRef.current;
+      const total = loadedRows.length;
+      if (!container || total === 0) {
+        setVirtualWindow({ start: 0, end: total });
+        return;
+      }
+
+      const viewport = container.clientHeight || 0;
+      const start = Math.max(
+        0,
+        Math.floor(scrollPos / VIRTUAL_ROW_HEIGHT) - VIRTUAL_BUFFER_ROWS
+      );
+      const end = Math.min(
+        total,
+        Math.ceil((scrollPos + viewport) / VIRTUAL_ROW_HEIGHT) + VIRTUAL_BUFFER_ROWS
+      );
+
+      setVirtualWindow((prev) =>
+        prev.start === start && prev.end === end ? prev : { start, end }
+      );
+    },
+    [loadedRows.length]
+  );
+
+  const handleScroll = useCallback(() => {
+    const container = tableScrollRef.current;
+    if (!container) return;
+    updateVirtualWindow(container.scrollTop);
+  }, [updateVirtualWindow]);
+
   React.useEffect(() => {
     const baseline = filteredRows.length === 0 ? 0 : Math.min(batchSize, filteredRows.length);
     setVisibleCount(baseline);
+    setRatingPage(1);
+    updateVirtualWindow(0);
   }, [filtersSignature, batchSize, filteredRows.length]);
+
+  React.useEffect(() => {
+    setRatingPage(1);
+  }, [summarySearch, ratingsPerPage]);
+
+  React.useEffect(() => {
+    const container = tableScrollRef.current;
+    updateVirtualWindow(container ? container.scrollTop : 0);
+  }, [loadedRows.length, updateVirtualWindow]);
+
+  const virtualRows = useMemo(() => {
+    if (virtualWindow.end <= virtualWindow.start) return [];
+    return loadedRows.slice(virtualWindow.start, virtualWindow.end);
+  }, [loadedRows, virtualWindow]);
+
+  const topSpacerHeight = Math.max(0, virtualWindow.start * VIRTUAL_ROW_HEIGHT);
+  const bottomSpacerHeight = Math.max(
+    0,
+    (loadedRows.length - virtualWindow.end) * VIRTUAL_ROW_HEIGHT
+  );
 
   React.useEffect(() => {
     const scrollRoot = tableScrollRef.current;
@@ -829,7 +1210,7 @@ export default function TradePreviewBuilder() {
                       Clear All
                     </button>
                   </div>
-                  <div className="max-h-64 space-y-2 overflow-y-auto pr-1">
+              <div className="max-h-64 space-y-2 overflow-y-auto pr-1 tp-scroll">
                     {pickedFiles.map((f, i) => {
                       const badgeLabel = getFileBadgeLabel(f.name);
                       return (
@@ -913,19 +1294,44 @@ export default function TradePreviewBuilder() {
           </div>
         </section>
         {/* Results Table */}
-        {rows.length > 0 && (
+        {(usingDatabase || rows.length > 0 || (dbMeta && dbMeta.success === false)) && (
           <section className="tp-card tp-results-card overflow-hidden rounded-2xl border border-blue-100 bg-white shadow-xl">
-            <header className="tp-results-header flex flex-col gap-3 bg-gradient-to-r from-blue-600 via-blue-700 to-indigo-700 px-4 py-4 text-white shadow-lg sm:flex-row sm:items-center sm:justify-between sm:px-6">
-              <h2 className="tp-results-title flex items-center gap-3 text-xl font-bold">
-                <span className="inline-flex h-9 w-9 items-center justify-center rounded-full bg-white/15 text-lg" aria-hidden="true">
-                  📊
-                </span>
-                Trade Results
-              </h2>
-              <div className="flex flex-col gap-2 text-sm sm:flex-row sm:items-center sm:gap-3">
+            <header className="tp-results-header flex flex-col gap-4 bg-gradient-to-r from-blue-600 via-blue-700 to-indigo-700 px-4 py-5 text-white shadow-lg sm:flex-row sm:items-start sm:justify-between sm:px-6">
+              <div className="flex flex-col gap-1">
+                <h2 className="tp-results-title flex items-center gap-3 text-xl font-bold">
+                  Trade Results
+                </h2>
+                {usingDatabase && dbMeta?.success && (
+                  <span className="text-xs text-emerald-200">
+                    Showing {dbMeta.fetched.toLocaleString()} of {dbMeta.total.toLocaleString()} stored trades.
+                  </span>
+                )}
+                {dbMeta && dbMeta.success === false && (
+                  <span className="text-xs text-amber-200">
+                    {dbMeta.message}
+                  </span>
+                )}
+              </div>
+              <div className="flex flex-col gap-2 text-sm sm:items-end sm:text-right">
                 <div className="rounded-lg bg-white/10 px-4 py-2 font-medium text-blue-50 backdrop-blur-sm">
-                  Showing {visibleRows.length.toLocaleString()} of {filteredRows.length.toLocaleString()} {filteredRows.length < rows.length && `(filtered from ${rows.length.toLocaleString()})`}
+                  Showing {loadedRows.length.toLocaleString()} of {filteredRows.length.toLocaleString()}
+                  {filteredRows.length < rows.length && ` (filtered from ${rows.length.toLocaleString()})`}
                 </div>
+                {usingDatabase && dbFiltersChanged && (
+                  <div className="rounded-md bg-amber-500/25 px-3 py-1 text-xs font-semibold text-amber-100 shadow-sm">
+                    Filters changed. Refresh from MongoDB to update.
+                  </div>
+                )}
+              </div>
+              <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-3">
+                <button
+                  type="button"
+                  onClick={() => fetchFromDatabase({ allowEmptyFilters: true })}
+                  disabled={busy}
+                  className="tp-btn inline-flex items-center justify-center rounded-md bg-white/85 px-4 py-2 text-sm font-semibold text-blue-700 shadow hover:bg-white focus:outline-none focus:ring-2 focus:ring-white/60 focus:ring-offset-2 focus:ring-offset-blue-700 disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  {busy ? "Refreshing..." : "Refresh from MongoDB"}
+                </button>
                 <button
                   type="button"
                   onClick={resetFilters}
@@ -936,10 +1342,40 @@ export default function TradePreviewBuilder() {
                 </button>
               </div>
             </header>
+            <div className="flex flex-wrap items-center gap-2 border-b border-blue-100/60 bg-blue-50/30 px-4 py-3 text-sm text-blue-900 sm:px-6 sm:text-base">
+              <span className="font-semibold uppercase tracking-wide text-blue-700/80">
+                Rating quick select:
+              </span>
+              {RATING_GROUP_OPTIONS.map((code) => {
+                const isActive = activeRatingGroup === code;
+                return (
+                  <button
+                    key={code}
+                    type="button"
+                    onClick={() => handleRatingShortcut(code)}
+                    className={`rounded-full px-3 py-1 text-xs font-semibold transition sm:text-sm ${
+                      isActive
+                        ? 'bg-blue-700 text-white shadow'
+                        : 'bg-white/80 text-blue-700 hover:bg-blue-100'
+                    }`}
+                  >
+                    {code}
+                  </button>
+                );
+              })}
+              <button
+                type="button"
+                onClick={() => handleRatingShortcut('')}
+                className="rounded-full px-3 py-1 text-xs font-semibold text-blue-600 transition hover:bg-blue-100 sm:text-sm"
+              >
+                Clear
+              </button>
+            </div>
             <div className="w-full overflow-x-auto">
               <div
                 ref={tableScrollRef}
-                className="max-h-[calc(100vh-320px)] overflow-y-auto"
+                onScroll={handleScroll}
+                className="tp-scroll max-h-[calc(100vh-320px)] overflow-y-auto"
               >
                 <table className="tp-table min-w-[1200px] w-full table-auto border-collapse">
                 <thead>
@@ -1111,8 +1547,8 @@ export default function TradePreviewBuilder() {
                   </tr>
                 </thead>
 
-                <tbody className="bg-white divide-y divide-slate-200 text-slate-700">
-                  {visibleRows.length === 0 ? (
+                <tbody className="bg-white text-slate-700">
+                  {loadedRows.length === 0 ? (
                     <tr>
                       <td colSpan={11 + maxRatingColumns} className="px-6 py-12 text-center">
                         <div className="text-gray-500">
@@ -1122,84 +1558,119 @@ export default function TradePreviewBuilder() {
                       </td>
                     </tr>
                   ) : (
-                    visibleRows.map((row, i) => (
-                    <tr 
-                      key={i} 
-                      className={`border-b border-gray-200 transition-colors hover:bg-blue-50 ${
-                        i % 2 === 0 ? 'bg-white' : 'bg-gray-50'
-                      }`}
-                    >
-                      <td className="px-3 py-2.5 text-sm border-r border-gray-200">
-                        <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold ${
-                          row.Exchange === 'NSE' ? 'bg-green-100 text-green-800 border border-green-200' : 'bg-blue-100 text-blue-800 border border-blue-200'
-                        }`}>
-                          {row.Exchange}
-                        </span>
-                      </td>
-                      <td className="px-3 py-2.5 text-sm text-gray-800 border-r border-gray-200 font-medium">
-                        {row["Trade Date"]}
-                      </td>
-                      <td className="px-3 py-2.5 text-sm text-gray-700 border-r border-gray-200 font-mono">
-                        {row["Trade Time"]}
-                      </td>
-                      <td className="px-3 py-2.5 text-xs text-gray-900 font-mono border-r border-gray-200 whitespace-normal break-words bg-gray-50" title={row.ISIN}>
-                        {row.ISIN}
-                      </td>
-                      <td className="px-3 py-2.5 text-sm text-gray-700 border-r border-gray-200 whitespace-normal break-words font-medium" title={row["Issuer details"]}>
-                        {row["Issuer details"]}
-                      </td>
-                      <td className="px-3 py-2.5 text-sm text-gray-700 border-r border-gray-200">
-                        {row.Maturity}
-                      </td>
-                      <td className="px-3 py-2.5 text-sm text-blue-900 text-right font-bold border-r border-gray-200">
-                        {Number(row["Amount (Rs lacs)"] ?? 0).toFixed(4)}
-                      </td>
-                      <td className="px-3 py-2.5 text-sm text-green-900 text-right font-bold border-r border-gray-200">
-                        Rs {Number(row["Price (Rs)"] ?? 0).toFixed(2)}
-                      </td>
-                      <td className="px-3 py-2.5 text-sm text-gray-700 border-r border-gray-200 text-center">
-                        {row.Yield}
-                      </td>
-                      <td className="px-3 py-2.5 text-sm border-r border-gray-200">
-                        <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-semibold whitespace-nowrap ${
-                          row.Status.toLowerCase().includes('success') || row.Status.toLowerCase().includes('settled')
-                            ? 'bg-green-100 text-green-800 border border-green-300'
-                            : row.Status.toLowerCase().includes('pending')
-                            ? 'bg-yellow-100 text-yellow-800 border border-yellow-300'
-                            : 'bg-gray-100 text-gray-700 border border-gray-300'
-                        }`}>
-                          {row.Status}
-                        </span>
-                      </td>
-                      <td className="px-3 py-2.5 text-sm border-r border-gray-200">
-                        <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-semibold whitespace-nowrap ${
-                          row["Deal Type"].toUpperCase().includes('DIRECT')
-                            ? 'bg-purple-100 text-purple-800 border border-purple-300'
-                            : 'bg-orange-100 text-orange-800 border border-orange-300'
-                        }`}>
-                          {row["Deal Type"]}
-                        </span>
-                      </td>
-                      {Array.from({ length: maxRatingColumns }).map((_, ratingIdx) => {
-                        const ratingValue = row.RatingParts?.[ratingIdx] || "";
+                    <>
+                      {topSpacerHeight > 0 && (
+                        <tr className="tp-virtual-pad" aria-hidden="true" style={{ height: `${topSpacerHeight}px` }}>
+                          <td colSpan={11 + maxRatingColumns} />
+                        </tr>
+                      )}
+                      {virtualRows.map((row, idx) => {
+                        const rowIndex = virtualWindow.start + idx;
+                        const zebra = rowIndex % 2 === 0 ? 'bg-white' : 'bg-gray-50';
+                        const rowKey =
+                          row.rowKey ??
+                          `${row.ISIN || 'isin'}-${row["Trade Time"] || rowIndex}-${rowIndex}`;
                         return (
-                          <td
-                            key={`rating-${i}-${ratingIdx}`}
-                            className={`px-3 py-2.5 text-xs text-gray-700 whitespace-normal break-words font-semibold${ratingIdx === maxRatingColumns - 1 ? "" : " border-r border-gray-200"}`}
-                            title={ratingValue || undefined}
+                          <tr
+                            key={rowKey}
+                            className={`border-b border-gray-200 transition-colors hover:bg-blue-50 ${zebra}`}
                           >
-                            {ratingValue || "-"}
-                          </td>
+                            <td className="px-3 py-2.5 text-sm border-r border-gray-200">
+                              <span
+                                className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold ${
+                                  row.Exchange === 'NSE'
+                                    ? 'bg-green-100 text-green-800 border border-green-200'
+                                    : 'bg-blue-100 text-blue-800 border border-blue-200'
+                                }`}
+                              >
+                                {row.Exchange}
+                              </span>
+                            </td>
+                            <td className="px-3 py-2.5 text-sm text-gray-800 border-r border-gray-200 font-medium">
+                              {row["Trade Date"]}
+                            </td>
+                            <td className="px-3 py-2.5 text-sm text-gray-700 border-r border-gray-200 font-mono">
+                              {row["Trade Time"]}
+                            </td>
+                            <td
+                              className="px-3 py-2.5 tp-isin text-gray-900 font-mono border-r border-gray-200 whitespace-normal break-words bg-gray-50"
+                              title={row.ISIN}
+                            >
+                              {row.ISIN}
+                            </td>
+                            <td
+                              className="px-3 py-2.5 text-sm text-gray-700 border-r border-gray-200 whitespace-normal break-words font-medium"
+                              title={row["Issuer details"]}
+                            >
+                              {row["Issuer details"]}
+                            </td>
+                            <td className="px-3 py-2.5 text-sm text-gray-700 border-r border-gray-200">
+                              {row.Maturity}
+                            </td>
+                            <td className="px-3 py-2.5 text-sm text-blue-900 text-right font-bold border-r border-gray-200">
+                              {Number(row["Amount (Rs lacs)"] ?? 0).toFixed(4)}
+                            </td>
+                            <td className="px-3 py-2.5 text-sm text-green-900 text-right font-bold border-r border-gray-200">
+                              Rs {Number(row["Price (Rs)"] ?? 0).toFixed(2)}
+                            </td>
+                            <td className="px-3 py-2.5 text-sm text-gray-700 border-r border-gray-200 text-center">
+                              {row.Yield}
+                            </td>
+                            <td className="px-3 py-2.5 text-sm border-r border-gray-200">
+                              <span
+                                className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-semibold whitespace-nowrap ${
+                                  row.Status.toLowerCase().includes('success') ||
+                                  row.Status.toLowerCase().includes('settled')
+                                    ? 'bg-green-100 text-green-800 border border-green-300'
+                                    : row.Status.toLowerCase().includes('pending')
+                                    ? 'bg-yellow-100 text-yellow-800 border border-yellow-300'
+                                    : 'bg-gray-100 text-gray-700 border border-gray-300'
+                                }`}
+                              >
+                                {row.Status}
+                              </span>
+                            </td>
+                            <td className="px-3 py-2.5 text-sm border-r border-gray-200">
+                              <span
+                                className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-semibold whitespace-nowrap ${
+                                  row["Deal Type"].toUpperCase().includes('DIRECT')
+                                    ? 'bg-purple-100 text-purple-800 border border-purple-300'
+                                    : 'bg-orange-100 text-orange-800 border border-orange-300'
+                                }`}
+                              >
+                                {row["Deal Type"]}
+                              </span>
+                            </td>
+                            {Array.from({ length: maxRatingColumns }).map((_, ratingIdx) => {
+                              const ratingValue = row.RatingParts?.[ratingIdx] || "";
+                              return (
+                                <td
+                                  key={`rating-${rowKey}-${ratingIdx}`}
+                                  className={`px-3 py-2.5 text-xs text-gray-700 whitespace-normal break-words font-semibold${
+                                    ratingIdx === maxRatingColumns - 1 ? "" : " border-r border-gray-200"
+                                  }`}
+                                  title={ratingValue || undefined}
+                                >
+                                  {ratingValue || "-"}
+                                </td>
+                              );
+                            })}
+                          </tr>
                         );
                       })}
-                    </tr>
-                  )))}
-                  {hasMoreRows && visibleRows.length > 0 && (
-                    <tr ref={sentinelRef}>
-                      <td colSpan={11 + maxRatingColumns} className="tp-loading-row px-3 py-4 text-center text-sm text-gray-500">
-                        Loading more trades...
-                      </td>
-                    </tr>
+                      {hasMoreRows && loadedRows.length > 0 && (
+                        <tr ref={sentinelRef}>
+                          <td colSpan={11 + maxRatingColumns} className="tp-loading-row px-3 py-4 text-center text-sm text-gray-500">
+                            Loading more trades...
+                          </td>
+                        </tr>
+                      )}
+                      {bottomSpacerHeight > 0 && (
+                        <tr className="tp-virtual-pad" aria-hidden="true" style={{ height: `${bottomSpacerHeight}px` }}>
+                          <td colSpan={11 + maxRatingColumns} />
+                        </tr>
+                      )}
+                    </>
                   )}
                 </tbody>
               </table>
@@ -1208,7 +1679,7 @@ export default function TradePreviewBuilder() {
             <div className="tp-load-controls bg-gray-50 px-6 py-4 border-t border-gray-200">
               <div className="tp-load-controls__row">
                 <span className="tp-load-controls__status">
-                  Showing {visibleRows.length.toLocaleString()} of {filteredRows.length.toLocaleString()} trades
+                  Showing {loadedRows.length.toLocaleString()} of {filteredRows.length.toLocaleString()} trades
                 </span>
                 <label className="tp-load-controls__batch">
                   <span>Rows per load:</span>
@@ -1265,7 +1736,7 @@ export default function TradePreviewBuilder() {
                   </div>
                 ) : (
                   <div className="tp-summary-grid">
-                    {filteredRatingSummaries.map(({ rating, buckets }) => {
+                    {paginatedRatingSummaries.map(({ rating, buckets }) => {
                       const ratingBannerClass = getRatingBannerClass(rating);
                       return (
                         <div key={rating} className="tp-summary-card bg-white/95 border border-slate-200 rounded-2xl shadow-lg overflow-hidden backdrop-blur">
@@ -1281,40 +1752,7 @@ export default function TradePreviewBuilder() {
                                     <span className="inline-block h-2.5 w-2.5 rounded-full bg-white/80" aria-hidden="true" />
                                     <span>{label}</span>
                                   </div>
-                                  <div className="overflow-x-auto">
-                                    <table className="tp-summary-table min-w-[720px] w-full table-auto border-collapse border border-slate-200 text-sm text-slate-700">
-                                      <thead className="bg-slate-800 text-[13px] uppercase tracking-[0.17em] text-white/90 border-b border-slate-700">
-                                        <tr>
-                                          <th className="px-3 py-3 text-left font-semibold text-white/90 tracking-wide align-middle w-36 border-r border-slate-700 last:border-r-0">Name of Issuer</th>
-                                          <th className="px-3 py-3 text-left font-semibold text-white/90 tracking-wide align-middle w-28 border-r border-slate-700 last:border-r-0">ISIN</th>
-                                          <th className="px-3 py-3 text-left font-semibold text-white/90 tracking-wide align-middle w-28 border-r border-slate-700 last:border-r-0">Maturity Date</th>
-                                          <th className="px-3 py-3 text-right font-semibold text-white/90 tracking-wide align-middle w-20 border-r border-slate-700 last:border-r-0">Trade Count</th>
-                                          <th className="px-3 py-3 text-right font-semibold text-white/90 tracking-wide align-middle w-28 border-r border-slate-700 last:border-r-0">Sum of Amount (INR Lacs)</th>
-                                          <th className="px-3 py-3 text-right font-semibold text-white/90 tracking-wide align-middle w-28 border-r border-slate-700 last:border-r-0">Weighted Avg Yield</th>
-                                          <th className="px-3 py-3 text-left font-semibold text-white/90 tracking-wide align-middle w-36 border-r border-slate-700 last:border-r-0">Broker + YTM</th>
-                                        </tr>
-                                      </thead>
-                                      <tbody className="bg-white divide-y divide-slate-200 text-slate-700">
-                                        {rows.length === 0 ? (
-                                          <tr>
-                                            <td colSpan={7} className="px-3 py-6 text-center italic text-slate-400">No matches found</td>
-                                          </tr>
-                                        ) : (
-                                          rows.map((summary) => (
-                                            <tr key={summary.rowKey} className="odd:bg-white even:bg-slate-100 transition-colors duration-200 hover:bg-orange-50/40">
-                                              <td className="px-3 py-4 font-semibold text-slate-800 whitespace-normal break-words align-top border-r border-slate-200 last:border-r-0 w-36">{summary.issuer}</td>
-                                              <td className="px-3 py-4 font-mono text-[11px] uppercase tracking-[0.2em] text-slate-500 whitespace-normal break-words align-top border-r border-slate-200 last:border-r-0 w-28">{summary.isin}</td>
-                                              <td className="px-3 py-4 text-slate-600 whitespace-normal break-words align-top border-r border-slate-200 last:border-r-0 w-28">{summary.maturity}</td>
-                                              <td className="px-3 py-4 text-right font-semibold text-slate-900 whitespace-normal break-words align-top border-r border-slate-200 last:border-r-0 w-20">{summary.tradeCount}</td>
-                                              <td className="px-3 py-4 text-right font-semibold text-indigo-600 whitespace-normal break-words align-top border-r border-slate-200 last:border-r-0 w-28">{summary.sumAmount.toFixed(2)}</td>
-                                              <td className="px-3 py-4 text-right font-semibold text-emerald-600 whitespace-normal break-words align-top border-r border-slate-200 last:border-r-0 w-28">{Number.isFinite(summary.weightedAverage) ? summary.weightedAverage.toFixed(2) : '-'}</td>
-                                              <td className="px-3 py-4 text-slate-600 whitespace-normal break-words align-top border-r border-slate-200 last:border-r-0 w-36">{summary.brokerYtm}</td>
-                                            </tr>
-                                          ))
-                                        )}
-                                      </tbody>
-                                    </table>
-                                  </div>
+                                  <VirtualizedSummaryTable rows={rows} />
                                 </div>
                               );
                             })}
@@ -1322,6 +1760,49 @@ export default function TradePreviewBuilder() {
                         </div>
                       );
                     })}
+                  </div>
+                )}
+                {filteredRatingSummaries.length > 0 && (
+                  <div className="tp-rating-controls">
+                    <div className="tp-rating-controls__row">
+                      <span className="tp-rating-controls__status">
+                        Rating set {currentRatingPage} of {ratingPages}
+                      </span>
+                      <label className="tp-rating-controls__size">
+                        <span>Ratings per page:</span>
+                        <select
+                          value={ratingsPerPage}
+                          onChange={(e) => setRatingsPerPage(Number(e.target.value))}
+                          className="tp-input px-3 py-1.5 border border-gray-300 rounded-md text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                        >
+                          <option value={1}>1</option>
+                          <option value={2}>2</option>
+                          <option value={3}>3</option>
+                          <option value={4}>4</option>
+                        </select>
+                      </label>
+                    </div>
+                    <div className="tp-rating-controls__pager">
+                      <button
+                        type="button"
+                        className="tp-btn tp-btn--outline"
+                        onClick={() => setRatingPage((prev) => Math.max(1, prev - 1))}
+                        disabled={currentRatingPage === 1}
+                      >
+                        Prev
+                      </button>
+                      <span className="tp-rating-controls__page-indicator">
+                        {currentRatingPage} / {ratingPages}
+                      </span>
+                      <button
+                        type="button"
+                        className="tp-btn tp-btn--outline"
+                        onClick={() => setRatingPage((prev) => Math.min(ratingPages, prev + 1))}
+                        disabled={currentRatingPage === ratingPages}
+                      >
+                        Next
+                      </button>
+                    </div>
                   </div>
                 )}
               </div>
@@ -1334,11 +1815,18 @@ export default function TradePreviewBuilder() {
 
         {rows.length === 0 && !busy && (
           <div className="bg-white rounded-lg shadow p-12 text-center text-gray-500">
-            <p className="text-lg">No preview data yet.</p>
-            <p className="text-sm mt-2">Upload BSE, NSE, and Securities master files to begin.</p>
+            <p className="text-lg">
+              {usingDatabase ? 'No trades matched the current filters.' : 'No preview data yet.'}
+            </p>
+            <p className="text-sm mt-2">
+              {usingDatabase
+                ? 'Adjust the rating or trade date filters and refresh from MongoDB.'
+                : 'Upload BSE, NSE, and Securities master files to begin.'}
+            </p>
           </div>
         )}
       </div>
     </div>
   );
 }
+
