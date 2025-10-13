@@ -4,6 +4,7 @@ const multer = require('multer');
 const path = require('path');
 const XLSX = require('xlsx');
 const MasterRating = require('../models/MasterRating');
+const InstrumentHolding = require('../models/InstrumentHolding');
 const TradingTransaction = require('../models/TradingTransaction');
 const router = express.Router();
 
@@ -33,6 +34,9 @@ const RATING_GROUPS = ['AAA', 'AA', 'A', 'BBB', 'BB', 'B'];
 let masterRatings = {};
 let masterRatingMeta = {};
 let masterRatingsLoadedAt = null;
+let holdingRatings = {};
+let holdingRatingMeta = {};
+let holdingRatingsLoadedAt = null;
 
 function normalizeIsin(value = '') {
   return String(value || '').trim().toUpperCase();
@@ -152,10 +156,56 @@ async function ensureMasterRatingsCache() {
   }
 }
 
+async function refreshHoldingRatingsCache() {
+  const documents = await InstrumentHolding.find({
+    isin: { $exists: true, $ne: null, $ne: '' },
+    rating: { $exists: true, $ne: null, $ne: '' },
+  })
+    .select({ isin: 1, rating: 1, issuer: 1, instrumentName: 1 })
+    .lean();
+
+  const ratingsMap = {};
+  const metaMap = {};
+
+  documents.forEach((doc) => {
+    const isin = normalizeIsin(doc.isin);
+    if (!isin) return;
+    const ratingValue = String(doc.rating || '').trim();
+    if (!ratingValue) return;
+
+    ratingsMap[isin] = ratingValue;
+    metaMap[isin] = {
+      ratingGroup: computeRatingGroup(ratingValue),
+      issuerName: doc.issuer || doc.instrumentName || '',
+    };
+  });
+
+  holdingRatings = ratingsMap;
+  holdingRatingMeta = metaMap;
+  holdingRatingsLoadedAt = new Date();
+}
+
+async function ensureHoldingRatingsCache() {
+  if (!holdingRatingsLoadedAt) {
+    await refreshHoldingRatingsCache();
+    return;
+  }
+  const ageMs = Date.now() - holdingRatingsLoadedAt.getTime();
+  if (ageMs > 10 * 60 * 1000) {
+    await refreshHoldingRatingsCache();
+  }
+}
+
 function getRatingDetailsForIsin(isin) {
   const normalized = normalizeIsin(isin);
-  const rating = masterRatings[normalized] || '';
-  const meta = masterRatingMeta[normalized] || {};
+  let rating = masterRatings[normalized] || '';
+  let meta = masterRatingMeta[normalized] || {};
+
+  if (!rating) {
+    rating = holdingRatings[normalized] || '';
+    meta = holdingRatingMeta[normalized] || meta;
+  }
+
   return {
     rating,
     ratingGroup: meta.ratingGroup || computeRatingGroup(rating),
@@ -241,6 +291,7 @@ router.post('/upload', upload.single('file'), async (req, res) => {
     }
 
     await ensureMasterRatingsCache();
+    await ensureHoldingRatingsCache();
 
     const now = new Date();
     const seenTransactions = new Set();
@@ -726,27 +777,45 @@ function formatBSETradeTime(timeValue) {
   return timeStr;
 }
 
-// Helper function to format maturity date (convert Excel date to DD-MM-YYYY)
+// Helper function to format maturity/trade date (convert to DD/MM/YYYY)
 function formatMaturityDate(dateValue) {
   if (!dateValue) return '';
-  
-  // If it's an Excel date number (days since 1900-01-01)
-  if (typeof dateValue === 'number') {
-    const excelEpoch = new Date(1900, 0, 1);
-    const date = new Date(excelEpoch.getTime() + (dateValue - 2) * 24 * 60 * 60 * 1000);
-    const day = String(date.getDate()).padStart(2, '0');
-    const month = String(date.getMonth() + 1).padStart(2, '0');
-    const year = date.getFullYear();
-    return `${day}-${month}-${year}`;
+  const asNumber = Number(dateValue);
+  if (!Number.isNaN(asNumber) && dateValue !== '' && dateValue !== null) {
+    if (asNumber > 59 && asNumber < 2958465) {
+      const excelEpoch = new Date(Date.UTC(1899, 11, 30));
+      const date = new Date(excelEpoch.getTime() + asNumber * 24 * 60 * 60 * 1000);
+      if (!Number.isNaN(date.getTime())) {
+        const day = String(date.getUTCDate()).padStart(2, '0');
+        const month = String(date.getUTCMonth() + 1).padStart(2, '0');
+        const year = date.getUTCFullYear();
+        return `${day}/${month}/${year}`;
+      }
+    }
   }
-  
-  // If it's a string in DD/MM/YYYY format
+
   const dateStr = String(dateValue).trim();
-  if (/^\d{1,2}\/\d{1,2}\/\d{4}$/.test(dateStr)) {
-    const parts = dateStr.split('/');
-    return `${parts[0].padStart(2, '0')}-${parts[1].padStart(2, '0')}-${parts[2]}`;
+  if (!dateStr) return '';
+
+  const normalized = dateStr.replace(/[-.]/g, '/');
+  const match = normalized.match(/^(\d{1,2})\/(\d{1,2})\/(\d{2,4})$/);
+  if (match) {
+    let [, d, m, y] = match;
+    if (y.length === 2) {
+      const yearNum = Number(y);
+      y = String(yearNum >= 70 ? 1900 + yearNum : 2000 + yearNum);
+    }
+    return `${d.padStart(2, '0')}/${m.padStart(2, '0')}/${y}`;
   }
-  
+
+  const parsed = new Date(dateStr);
+  if (!Number.isNaN(parsed.getTime())) {
+    const day = String(parsed.getUTCDate()).padStart(2, '0');
+    const month = String(parsed.getUTCMonth() + 1).padStart(2, '0');
+    const year = parsed.getUTCFullYear();
+    return `${day}/${month}/${year}`;
+  }
+
   return dateStr;
 }
 
@@ -799,7 +868,7 @@ function transformRowToUnifiedTransaction(row, rowNumber, exchangeType) {
       issuerName = String(row.issuerName || '').trim();
       coupon = String(row.coupon || '').trim();
       maturityDate = formatMaturityDate(row.maturityDate || '');
-      tradeDate = String(row.dealDate || '').trim();
+      tradeDate = formatMaturityDate(row.dealDate || '');
       settlementType = String(row.settlementType || '').trim();
       tradeAmount = String(row.tradeAmount || '').trim();
       tradePrice = String(row.tradePrice || '').trim();
@@ -807,8 +876,8 @@ function transformRowToUnifiedTransaction(row, rowNumber, exchangeType) {
       tradeTime = formatBSETradeTime(row.tradeTime || '');
       orderType = String(row.orderType || '').trim();
       
-      // Get rating from master list
-      rating = masterRatings[isin] || '';
+      // Get rating from master/holdings
+      rating = masterRatings[isin] || holdingRatings[isin] || '';
 
       console.log(`BSE Data - Amount: ${tradeAmount}, Price: ${tradePrice}, Time: ${tradeTime}, Maturity: ${maturityDate}, Rating: ${rating}`);
 
@@ -858,16 +927,16 @@ function transformRowToUnifiedTransaction(row, rowNumber, exchangeType) {
       }
 
       maturityDate = formatMaturityDate(row.maturityDate || '');
-      tradeDate = String(row.date || '').trim();
+      tradeDate = formatMaturityDate(row.date || '');
       tradeAmount = String(row.dealSize || '').trim();
       tradePrice = String(row.price || '').trim();
       yieldValue = String(row.yield || '').trim();
       tradeTime = formatNSETradeTime(row.tradeTime || '');
       settlementStatus = String(row.settlementStatus || '').trim();
-      settlementDate = String(row.settlementDate || '').trim();
+      settlementDate = formatMaturityDate(row.settlementDate || '');
       
-      // Get rating from master list
-      rating = masterRatings[isin] || '';
+      // Get rating from master/holdings
+      rating = masterRatings[isin] || holdingRatings[isin] || '';
 
       console.log(`NSE Data - Amount: ${tradeAmount}, Price: ${tradePrice}, Time: ${tradeTime}, Maturity: ${maturityDate}, Rating: ${rating}`);
 
@@ -1124,6 +1193,7 @@ router.post('/upload-master', upload.single('file'), async (req, res) => {
     }
 
     await refreshMasterRatingsCache();
+    await refreshHoldingRatingsCache();
 
     const processedCount = preparedRecords.length;
     const inserted = bulkResult.upsertedCount || 0;

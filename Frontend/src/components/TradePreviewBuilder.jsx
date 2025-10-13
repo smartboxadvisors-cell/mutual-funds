@@ -1,4 +1,4 @@
-import React, { useMemo, useState, useCallback, useRef, useLayoutEffect } from "react";
+﻿import React, { useMemo, useState, useCallback, useRef, useLayoutEffect } from "react";
 import * as XLSX from "xlsx";
 import Papa from "papaparse";
 import "../App.css";
@@ -344,25 +344,26 @@ const sortRowsDescending = (rowsList = []) => {
 const mapTransactionToRow = (transaction) => {
   if (!transaction) return null;
 
-  const exchange = transaction.exchange || transaction.raw?.exchange || '';
-  const tradeDateValue = transaction.tradeDate || transaction.raw?.tradeDate || '';
-  const maturityValue = transaction.maturityDate || transaction.raw?.maturityDate || '';
+  const raw = transaction.raw || {};
+  const exchange = transaction.exchange || raw.exchange || raw.Exchange || '';
+  const tradeDateValue = transaction.tradeDate || raw.tradeDate || raw['Trade Date'] || '';
+  const maturityValue = transaction.maturityDate || raw.maturityDate || raw.Maturity || '';
 
   let amountValue =
     typeof transaction.tradeAmountValue === 'number' && !Number.isNaN(transaction.tradeAmountValue)
       ? transaction.tradeAmountValue
-      : coerceNumber(transaction.tradeAmountRaw || transaction.raw?.tradeAmount);
+      : coerceNumber(transaction.tradeAmountRaw || raw.tradeAmount || raw['Amount (Rs lacs)']);
   if (amountValue === null || Number.isNaN(amountValue)) {
     amountValue = 0;
   }
-  if (exchange === 'NSE' && amountValue > 1000) {
+  if (exchange.toUpperCase() === 'NSE' && amountValue > 1000) {
     amountValue = amountValue / 100000;
   }
 
   let priceValue =
     typeof transaction.tradePriceValue === 'number' && !Number.isNaN(transaction.tradePriceValue)
       ? transaction.tradePriceValue
-      : coerceNumber(transaction.tradePriceRaw || transaction.raw?.tradePrice);
+      : coerceNumber(transaction.tradePriceRaw || raw.tradePrice || raw['Price (Rs)']);
   if (priceValue === null || Number.isNaN(priceValue)) {
     priceValue = 0;
   }
@@ -372,12 +373,14 @@ const mapTransactionToRow = (transaction) => {
     ratingValue = transaction.rating.trim();
   } else if (transaction.ratingGroup && transaction.ratingGroup !== 'UNRATED') {
     ratingValue = transaction.ratingGroup;
-  } else if (typeof transaction.raw?.rating === 'string') {
-    ratingValue = transaction.raw.rating.trim();
+  } else if (typeof raw.rating === 'string' && raw.rating.trim()) {
+    ratingValue = raw.rating.trim();
+  } else if (typeof raw.Rating === 'string' && raw.Rating.trim()) {
+    ratingValue = raw.Rating.trim();
   }
 
   const ratingParts = ratingValue
-    ? ratingValue.split(';').map((part) => part.trim()).filter(Boolean)
+    ? ratingValue.split(/[|;]+/).map((part) => part.trim()).filter(Boolean)
     : [];
 
   const yieldValue = (() => {
@@ -387,21 +390,25 @@ const mapTransactionToRow = (transaction) => {
     if (typeof transaction.yieldValue === 'number' && !Number.isNaN(transaction.yieldValue)) {
       return transaction.yieldValue.toString();
     }
+    if (raw.Yield) return String(raw.Yield);
     return '';
   })();
 
+  const issuerDetail =
+    transaction.issuerName || raw.issuerName || raw['Issuer details'] || raw.issuer || '';
+
   return {
-    Exchange: exchange || '',
+    Exchange: (exchange || '').toUpperCase(),
     "Trade Date": toDate(tradeDateValue) || '',
-    "Trade Time": transaction.tradeTime || '',
-    ISIN: String(transaction.isin || '').toUpperCase(),
-    "Issuer details": transaction.issuerName || '',
+    "Trade Time": transaction.tradeTime || raw.tradeTime || raw['Trade Time'] || '',
+    ISIN: String(transaction.isin || raw.ISIN || '').toUpperCase(),
+    "Issuer details": issuerDetail,
     Maturity: toDate(maturityValue) || '',
     "Amount (Rs lacs)": Number(amountValue || 0),
     "Price (Rs)": Number(priceValue || 0),
     Yield: yieldValue,
-    Status: transaction.settlementStatus || '',
-    "Deal Type": transaction.orderType || '',
+    Status: transaction.settlementStatus || raw.settlementStatus || raw.Status || '',
+    "Deal Type": transaction.orderType || raw.orderType || raw['Deal Type'] || '',
     Rating: ratingValue,
     RatingParts: ratingParts,
   };
@@ -438,6 +445,9 @@ export default function TradePreviewBuilder() {
   const [rows, setRows] = useState([]);
   const [filters, setFilters] = useState(() => ({ ...FILTER_DEFAULTS }));
   const [busy, setBusy] = useState(false);
+  const [serverSyncing, setServerSyncing] = useState(false);
+  const [serverSyncSummaries, setServerSyncSummaries] = useState([]);
+  const [serverSyncError, setServerSyncError] = useState('');
   const [usingDatabase, setUsingDatabase] = useState(false);
   const [dbMeta, setDbMeta] = useState(null);
   const [lastDbQuery, setLastDbQuery] = useState(null);
@@ -447,6 +457,7 @@ export default function TradePreviewBuilder() {
   const headerRowRef = useRef(null);
   const tableScrollRef = useRef(null);
   const sentinelRef = useRef(null);
+  const uploadedFilesRef = useRef(new Set());
   const [virtualWindow, setVirtualWindow] = useState({ start: 0, end: 0 });
   const [filterTop, setFilterTop] = useState('0px');
   const [summarySearch, setSummarySearch] = useState('');
@@ -481,6 +492,8 @@ export default function TradePreviewBuilder() {
     setRows([]);
     resetFilters();
     setVisibleCount(batchSize);
+    setServerSyncSummaries([]);
+    setServerSyncError('');
     setUsingDatabase(false);
     setDbMeta(null);
     setLastDbQuery(null);
@@ -488,6 +501,102 @@ export default function TradePreviewBuilder() {
 
   const resetFilters = useCallback(() => {
     setFilters({ ...FILTER_DEFAULTS });
+  }, []);
+
+  const syncFilesWithServer = useCallback(async (files = []) => {
+    if (!files || files.length === 0) {
+      setServerSyncSummaries([]);
+      setServerSyncError('');
+      return [];
+    }
+
+    setServerSyncing(true);
+    setServerSyncError('');
+
+    const token = localStorage.getItem('token');
+    const summaries = [];
+
+    for (const file of files) {
+      const lowerName = file.name.toLowerCase();
+      const isMasterCandidates = ['security', 'securit', 'master'];
+      const isMaster = isMasterCandidates.some((token) => lowerName.includes(token));
+      const endpoint = isMaster ? `${API_BASE}/trading/upload-master` : `${API_BASE}/trading/upload`;
+      const key = `${endpoint}::${file.name}__${file.size}__${file.lastModified}`;
+
+      if (uploadedFilesRef.current.has(key)) {
+        summaries.push({
+          name: file.name,
+          status: 'skipped',
+          details: 'Already synced with MongoDB.',
+        });
+        continue;
+      }
+
+      try {
+        const formData = new FormData();
+        formData.append('file', file);
+
+        const response = await fetch(endpoint, {
+          method: 'POST',
+          headers: {
+            ...(token ? { Authorization: `Bearer ${token}` } : {}),
+          },
+          body: formData
+        });
+
+        let payload = {};
+        try {
+          payload = await response.json();
+        } catch {
+          payload = {};
+        }
+
+        if (!response.ok || payload.success === false) {
+          throw new Error(payload.error || `Server responded with ${response.status}`);
+        }
+
+        if (isMaster) {
+          const processed = payload.processedCount ?? 0;
+          const inserted = payload.inserted ?? 0;
+          const updated = payload.updated ?? 0;
+
+          summaries.push({
+            name: file.name,
+            status: 'success',
+            details: `Master list processed ${processed} rows (inserted ${inserted}, updated ${updated}).`,
+          });
+
+          uploadedFilesRef.current.add(key);
+          continue;
+        }
+
+        const imported = payload.imported ?? 0;
+        const updated = payload.updated ?? 0;
+        const duplicates = payload.duplicates ?? 0;
+
+        summaries.push({
+          name: file.name,
+          status: 'success',
+          details: `Stored ${imported} new, updated ${updated}, skipped ${duplicates} duplicates.`,
+        });
+
+        uploadedFilesRef.current.add(key);
+      } catch (error) {
+        console.error('Trading sync upload error:', error);
+        summaries.push({
+          name: file.name,
+          status: 'error',
+          details: error.message || 'Failed to sync file with MongoDB.',
+        });
+      }
+    }
+
+    setServerSyncSummaries(summaries);
+    const hasError = summaries.some((entry) => entry.status === 'error');
+    setServerSyncError(hasError ? 'Some files failed to sync. See details below.' : '');
+    setServerSyncing(false);
+
+    return summaries;
   }, []);
 
   const parseFile = (file) => {
@@ -539,6 +648,7 @@ export default function TradePreviewBuilder() {
   const buildPreview = async () => {
     setBusy(true);
     try {
+      await syncFilesWithServer(pickedFiles);
       const parsed = await Promise.all(pickedFiles.map((f) => parseFile(f)));
 
       let securitiesMap = {};
@@ -1293,6 +1403,48 @@ export default function TradePreviewBuilder() {
             </ul>
           </div>
         </section>
+        {(serverSyncing || serverSyncSummaries.length > 0 || serverSyncError) && (
+          <section className="rounded-2xl border border-blue-100 bg-white/90 px-4 py-4 shadow-sm sm:px-6">
+            <div className="flex items-center justify-between">
+              <h4 className="text-base font-semibold text-slate-800">MongoDB Sync Status</h4>
+              {serverSyncing && (
+                <span className="flex items-center gap-2 text-xs font-semibold text-blue-600">
+                  <span className="inline-flex h-2.5 w-2.5 animate-ping rounded-full bg-blue-500/70" />
+                  Syncing…
+                </span>
+              )}
+            </div>
+            {serverSyncError && (
+              <p className="mt-2 text-sm text-rose-600">{serverSyncError}</p>
+            )}
+            {serverSyncSummaries.length > 0 && (
+              <ul className="mt-3 space-y-2 text-sm">
+                {serverSyncSummaries.map((entry, index) => {
+                  const tone =
+                    entry.status === 'error'
+                      ? 'text-rose-600'
+                      : entry.status === 'skipped'
+                      ? 'text-amber-600'
+                      : 'text-emerald-600';
+                  return (
+                    <li
+                      key={`${entry.name}-${index}`}
+                      className="flex flex-col gap-1 rounded-lg border border-blue-50 bg-blue-50/50 px-3 py-2 sm:flex-row sm:items-center sm:justify-between"
+                    >
+                      <span className="font-medium text-slate-800">{entry.name}</span>
+                      <span className={`text-sm ${tone}`}>{entry.details}</span>
+                    </li>
+                  );
+                })}
+              </ul>
+            )}
+            {!serverSyncing && serverSyncSummaries.length === 0 && !serverSyncError && (
+              <p className="mt-2 text-sm text-slate-600">
+                Upload files and build a preview to sync trades with MongoDB.
+              </p>
+            )}
+          </section>
+        )}
         {/* Results Table */}
         {(usingDatabase || rows.length > 0 || (dbMeta && dbMeta.success === false)) && (
           <section className="tp-card tp-results-card overflow-hidden rounded-2xl border border-blue-100 bg-white shadow-xl">
