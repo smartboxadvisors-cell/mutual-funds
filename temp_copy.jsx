@@ -38,14 +38,14 @@ const AMOUNT_BUCKETS = [
   { key: 'ABOVE_2500', label: 'Above 2500 Lac', min: 2500, max: Infinity },
 ];
 
-const BUCKET_HEADER_COLORS = {
-  UNDER_10: '#1e293b',
-  BETWEEN_10_50: '#1d4ed8',
-  BETWEEN_50_100: '#4338ca',
-  BETWEEN_100_500: '#2563eb',
-  BETWEEN_500_2500: '#0f62fe',
-  ABOVE_2500: '#0f172a',
-  default: '#1f2937',
+const BUCKET_THEME_CLASSES = {
+  UNDER_10: 'bg-gradient-to-r from-indigo-500 via-violet-500 to-purple-500 text-white',
+  BETWEEN_10_50: 'bg-gradient-to-r from-indigo-500 via-purple-500 to-indigo-600 text-white',
+  BETWEEN_50_100: 'bg-gradient-to-r from-violet-500 via-indigo-500 to-purple-600 text-white',
+  BETWEEN_100_500: 'bg-gradient-to-r from-indigo-600 via-blue-600 to-sky-500 text-white',
+  BETWEEN_500_2500: 'bg-gradient-to-r from-blue-500 via-sky-500 to-cyan-500 text-white',
+  ABOVE_2500: 'bg-gradient-to-r from-slate-600 via-slate-700 to-slate-800 text-white',
+  default: 'bg-gradient-to-r from-slate-500 via-slate-600 to-slate-700 text-white',
 };
 
 const VIRTUAL_ROW_HEIGHT = 56;
@@ -309,14 +309,6 @@ const pickNumeric = (...sources) => {
     if (numeric !== null) return numeric;
   }
   return null;
-};
-
-const getFileBadgeLabel = (filename = '') => {
-  const lower = String(filename || '').toLowerCase();
-  if (lower.endsWith('.csv')) return 'CSV';
-  if (lower.endsWith('.xlsx')) return 'XLSX';
-  if (lower.endsWith('.xls')) return 'XLS';
-  return 'FILE';
 };
 
 const normalizeRatingGroup = (label = '') => {
@@ -703,7 +695,7 @@ export default function TradePreviewBuilder() {
           const maturityIdx = firstCol(headers, ["maturity date", "maturity"]);
           const dealSizeIdx = firstCol(headers, ["deal size", "trade amount (rs)", "amount"]);
           const priceIdx = firstCol(headers, ["price", "trade price"]);
-          const yieldIdx = firstCol(headers, ["yield", "traded yield", "deal yield"]);
+          const yieldIdx = firstCol(headers, ["yield", "traded yield"]);
           const statusIdx = firstCol(headers, ["settlement status", "status"]);
           const sellerIdx = firstCol(headers, ["seller deal type", "seller type"]);
           const buyerIdx = firstCol(headers, ["buyer deal type", "buyer type"]);
@@ -749,7 +741,7 @@ export default function TradePreviewBuilder() {
           const maturityIdx = firstCol(headers, ["maturity date", "maturity"]);
           const amountIdx = firstCol(headers, ["trade amount (in rs lacs)", "amount (rs lacs)", "amount"]);
           const priceIdx = firstCol(headers, ["trade price (rs)", "price"]);
-          const yieldIdx = firstCol(headers, ["traded yield (%)", "yield", "deal yield"]);
+          const yieldIdx = firstCol(headers, ["traded yield (%)", "yield"]);
           const orderTypeIdx = firstCol(headers, ["order type", "type"]);
           const exchangeLabel = effectiveExchange || "BSE";
 
@@ -757,7 +749,7 @@ export default function TradePreviewBuilder() {
             const isin = String(row[isinIdx] || "").trim();
             if (!isin || !/^[A-Z0-9]{12}$/.test(isin)) continue;
 
-            const amountLacs = pickNumeric(row[amountIdx], row['Trade Amount (In Rs lacs)']) ?? 0;
+            const amountLacs = parseFloat(row[amountIdx]) || 0;
             const orderType = String(row[orderTypeIdx] || "").toUpperCase();
 
             tradeRows.push({
@@ -1066,18 +1058,16 @@ export default function TradePreviewBuilder() {
         row.tradeAmountRaw,
         row.raw?.tradeAmountValue,
         row.raw?.tradeAmount
-      );
+       ) ?? 0;
 
-      const yieldVal = pickNumeric(
-        row["Deal Yield"],
-        row.Yield,
-        row.yieldValue,
-        row.raw?.yield,
-        row.raw?.yieldValue
-      );
-
-      if (amount !== null && amount > 0 && yieldVal !== null) {
+      if (amount > 0) {
         totalAmount += amount;
+        const yieldVal = pickNumeric(
+          row.Yield,
+          row.yieldValue,
+          row.raw?.yield,
+          row.raw?.yieldValue
+         ) ?? 0;
         weightedYieldNumerator += yieldVal * amount;
         weightedYieldDenominator += amount;
       }
@@ -1164,19 +1154,7 @@ export default function TradePreviewBuilder() {
         row.tradeAmountRaw,
         row.raw?.tradeAmountValue,
         row.raw?.tradeAmount
-      );
-
-      const yieldValue = pickNumeric(
-        row['Deal Yield'],
-        row.Yield,
-        row.yieldValue,
-        row.raw?.yield,
-        row.raw?.yieldValue
-      );
-
-      if (amount === null || amount <= 0 || yieldValue === null) {
-        return;
-      }
+       ) ?? 0;
 
       const bucket =
         AMOUNT_BUCKETS.find((b) => amount >= b.min && amount < b.max) || AMOUNT_BUCKETS[AMOUNT_BUCKETS.length - 1];
@@ -1214,7 +1192,14 @@ export default function TradePreviewBuilder() {
 
       summary.tradeCount += 1;
       summary.sumAmount += amount;
-      summary.weightedNumerator += yieldValue * amount;
+
+      const yieldValue = pickNumeric(
+        row.Yield,
+        row.yieldValue,
+        row.raw?.yield,
+        row.raw?.yieldValue
+       ) ?? 0;
+           if (yieldValue !== null) {\r\n        summary.weightedNumerator += yieldValue * amount;\r\n      }
 
       const brokerLabel = [row['Deal Type'], row.Yield].filter(Boolean).join(' / ');
       if (brokerLabel) {
@@ -2147,53 +2132,47 @@ export default function TradePreviewBuilder() {
                     {paginatedRatingSummaries.map(({ rating, buckets }) => {
                       const ratingBannerClass = getRatingBannerClass(rating);
                       return (
-                        <div key={rating} className="tp-summary-card bg-gradient-to-br from-slate-50 via-white to-slate-100 border border-slate-200 rounded-2xl shadow-lg overflow-hidden backdrop-blur">
+                        <div key={rating} className="tp-summary-card bg-white/95 border border-slate-200 rounded-2xl shadow-lg overflow-hidden backdrop-blur">
                           <div className={`px-6 py-5 text-2xl font-extrabold tracking-wide uppercase shadow-md ${ratingBannerClass}`}>
                             {rating}
                           </div>
-                          <div className="tp-summary-bucket-list">
+                          <div className="divide-y divide-slate-200">
                             {buckets.map(({ key, label, rows }) => {
-                              const bucketHeaderColor =
-                                BUCKET_HEADER_COLORS[key] || BUCKET_HEADER_COLORS.default;
+                              const bucketTheme = BUCKET_THEME_CLASSES[key] || BUCKET_THEME_CLASSES.default;
                               const bucketKeyId = `${rating}-${key}`;
                               const totalBucketPages = Math.max(1, Math.ceil(rows.length / AGGREGATE_ROWS_PER_PAGE));
                               const currentBucketPage = bucketPageMap[bucketKeyId] || 1;
                               const pagedRows = rows.slice((currentBucketPage - 1) * AGGREGATE_ROWS_PER_PAGE, currentBucketPage * AGGREGATE_ROWS_PER_PAGE);
                               return (
-                                <div key={`${rating}-${key}`} className="tp-summary-bucket">
-                                  <div
-                                    className="tp-summary-bucket__header"
-                                    style={{ backgroundColor: bucketHeaderColor }}
-                                  >
-                                    <span className="tp-summary-bucket__dot" aria-hidden="true" />
-                                    <span className="tp-summary-bucket__title">{label}</span>
+                                <div key={`${rating}-${key}`} className="tp-summary-bucket bg-gradient-to-br from-blue-100 via-blue-50 to-white px-2 sm:px-4 pb-6 border border-blue-200 rounded-xl shadow-sm">
+                                  <div className={`flex items-center gap-3 px-4 sm:px-6 py-4 text-base font-semibold uppercase tracking-[0.18em] shadow-sm ${bucketTheme} border-b border-blue-100/70`}>
+                                    <span className="inline-block h-2.5 w-2.5 rounded-full bg-white/80" aria-hidden="true" />
+                                    <span>{label}</span>
                                   </div>
-                                  <div className="tp-summary-bucket__content">
-                                    <SummaryTable rows={pagedRows} />
-                                    {totalBucketPages > 1 && (
-                                      <div className="tp-summary-bucket__pagination">
-                                        <span>Page {currentBucketPage} of {totalBucketPages}</span>
-                                        <div className="tp-summary-bucket__pager">
-                                          <button
-                                            type="button"
-                                            onClick={() => handleBucketPageChange(bucketKeyId, currentBucketPage - 1, totalBucketPages)}
-                                            className="rounded border border-slate-300 px-2 py-1 hover:bg-slate-100 disabled:opacity-50"
-                                            disabled={currentBucketPage === 1}
-                                          >
-                                            Prev
-                                          </button>
-                                          <button
-                                            type="button"
-                                            onClick={() => handleBucketPageChange(bucketKeyId, currentBucketPage + 1, totalBucketPages)}
-                                            className="rounded border border-slate-300 px-2 py-1 hover:bg-slate-100 disabled:opacity-50"
-                                            disabled={currentBucketPage === totalBucketPages}
-                                          >
-                                            Next
-                                          </button>
-                                        </div>
+                                  <SummaryTable rows={pagedRows} />
+                                  {totalBucketPages > 1 && (
+                                    <div className="flex items-center justify-between px-4 py-2 text-xs text-slate-600">
+                                      <span>Page {currentBucketPage} of {totalBucketPages}</span>
+                                      <div className="flex gap-2">
+                                        <button
+                                          type="button"
+                                          onClick={() => handleBucketPageChange(bucketKeyId, currentBucketPage - 1, totalBucketPages)}
+                                          className="rounded border border-slate-300 px-2 py-1 hover:bg-slate-100 disabled:opacity-50"
+                                          disabled={currentBucketPage === 1}
+                                        >
+                                          Prev
+                                        </button>
+                                        <button
+                                          type="button"
+                                          onClick={() => handleBucketPageChange(bucketKeyId, currentBucketPage + 1, totalBucketPages)}
+                                          className="rounded border border-slate-300 px-2 py-1 hover:bg-slate-100 disabled:opacity-50"
+                                          disabled={currentBucketPage === totalBucketPages}
+                                        >
+                                          Next
+                                        </button>
                                       </div>
-                                    )}
-                                  </div>
+                                    </div>
+                                  )}
                                 </div>
                               );
                             })}
