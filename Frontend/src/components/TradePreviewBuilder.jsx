@@ -1,4 +1,4 @@
-﻿import React, { useMemo, useState, useCallback, useRef, useLayoutEffect } from "react";
+﻿import React, { useMemo, useState, useCallback, useRef, useLayoutEffect, useEffect } from "react";
 import * as XLSX from "xlsx";
 import Papa from "papaparse";
 import "../App.css";
@@ -18,7 +18,9 @@ const FILTER_DEFAULTS = {
   yield: "",
   status: "",
   dealType: "",
-  rating: ""
+  rating: "",
+  startDate: "",
+  endDate: ""
 };
 
 const API_BASE = import.meta.env?.VITE_API_URL || "http://localhost:5000/api";
@@ -255,6 +257,42 @@ const toDate = (val) => {
   return str;
 };
 
+const parseDmyToDate = (value) => {
+  if (!value) return null;
+  if (value instanceof Date && !Number.isNaN(value.getTime())) return value;
+
+  const numeric = coerceNumber(value);
+  if (numeric !== null) {
+    if (numeric > 59 && numeric < 2958465) {
+      const excel = excelSerialToDate(numeric);
+      return Number.isNaN(excel.getTime()) ? null : excel;
+    }
+  }
+
+  const str = String(value).trim();
+  if (!str) return null;
+
+  const normalized = str.replace(/[-.]/g, '/');
+  const match = normalized.match(/^(\d{1,2})\/(\d{1,2})\/(\d{2,5})$/);
+  if (match) {
+    let [, d, m, y] = match;
+    if (y.length === 2) {
+      const yy = Number(y);
+      y = String(yy >= 70 ? 1900 + yy : 2000 + yy);
+    }
+    const yearNum = Number(y);
+    if (!Number.isNaN(yearNum) && yearNum > 4000) {
+      const excel = excelSerialToDate(yearNum);
+      if (!Number.isNaN(excel.getTime())) return excel;
+    }
+    const parsed = new Date(Number(y), Number(m) - 1, Number(d));
+    return Number.isNaN(parsed.getTime()) ? null : parsed;
+  }
+
+  const parsed = new Date(str);
+  return Number.isNaN(parsed.getTime()) ? null : parsed;
+};
+
 const fractionToTime = (fraction) => {
   const normalized = ((fraction % 1) + 1) % 1;
   const totalSeconds = Math.round(normalized * 86400) % 86400;
@@ -473,6 +511,9 @@ export default function TradePreviewBuilder() {
   const filtersSignature = JSON.stringify(filters);
   const [ratingsPerPage, setRatingsPerPage] = useState(2);
   const [ratingPage, setRatingPage] = useState(1);
+  const [showAggregated, setShowAggregated] = useState(false);
+  const [bucketPageMap, setBucketPageMap] = useState({});
+  const AGGREGATE_ROWS_PER_PAGE = 20;
 
   const handleFileInput = (e) => {
     const files = Array.from(e.target.files || []);
@@ -496,6 +537,25 @@ export default function TradePreviewBuilder() {
     setIsDragging(false);
   }, []);
 
+  const handleShowAggregated = useCallback(() => {
+    setBucketPageMap({});
+    setRatingPage(1);
+    setShowAggregated(true);
+  }, []);
+
+  const handleHideAggregated = useCallback(() => {
+    setShowAggregated(false);
+  }, []);
+
+  const handleBucketPageChange = useCallback((bucketKey, nextPage, totalPages) => {
+    const safePage = Math.max(1, Math.min(totalPages, nextPage));
+    setBucketPageMap((prev) => {
+      const current = prev[bucketKey] || 1;
+      if (current === safePage) return prev;
+      return { ...prev, [bucketKey]: safePage };
+    });
+  }, []);
+
   const clearFiles = () => {
     setPickedFiles([]);
     setRows([]);
@@ -503,6 +563,8 @@ export default function TradePreviewBuilder() {
     setVisibleCount(batchSize);
     setServerSyncSummaries([]);
     setServerSyncError('');
+    setShowAggregated(false);
+    setBucketPageMap({});
     setUsingDatabase(false);
     setDbMeta(null);
     setLastDbQuery(null);
@@ -803,15 +865,17 @@ export default function TradePreviewBuilder() {
     const ratingInput = (filters.rating || '').trim();
     const tradeDateInput = (filters.tradeDate || '').trim();
     const exchangeInput = (filters.exchange || '').trim();
+    const startDateInput = (filters.startDate || '').trim();
+    const endDateInput = (filters.endDate || '').trim();
 
     const ratingGroupParam = ratingInput ? normalizeRatingGroup(ratingInput) : '';
     const exchangeParam = exchangeInput ? exchangeInput.toUpperCase() : '';
 
-    if (!allowEmptyFilters && !ratingGroupParam && !tradeDateInput) {
+    if (!allowEmptyFilters && !ratingGroupParam && !tradeDateInput && !startDateInput && !endDateInput) {
       setUsingDatabase(false);
       setDbMeta({
         success: false,
-        message: 'Set a Rating (e.g. AAA) or Trade Date filter before fetching from MongoDB.',
+        message: 'Set a rating (e.g. AAA), trade date, or date range filter before fetching from MongoDB.',
       });
       return;
     }
@@ -821,6 +885,8 @@ export default function TradePreviewBuilder() {
     params.set('limit', String(DB_FETCH_LIMIT));
     if (ratingGroupParam) params.set('ratingGroup', ratingGroupParam);
     if (tradeDateInput) params.set('date', tradeDateInput);
+    if (startDateInput) params.set('startDate', startDateInput);
+    if (endDateInput) params.set('endDate', endDateInput);
     if (exchangeParam) params.set('exchange', exchangeParam);
 
     setBusy(true);
@@ -856,6 +922,8 @@ export default function TradePreviewBuilder() {
       setLastDbQuery({
         ratingGroup: ratingGroupParam,
         tradeDate: tradeDateInput,
+        startDate: startDateInput,
+        endDate: endDateInput,
         exchange: exchangeParam,
         initial,
       });
@@ -888,14 +956,26 @@ export default function TradePreviewBuilder() {
     [filters.tradeDate]
   );
 
+  const normalizedStartDateFilter = useMemo(
+    () => (filters.startDate || '').trim(),
+    [filters.startDate]
+  );
+
+  const normalizedEndDateFilter = useMemo(
+    () => (filters.endDate || '').trim(),
+    [filters.endDate]
+  );
+
   const dbFiltersChanged = useMemo(() => {
     if (!usingDatabase || !lastDbQuery) return false;
     return (
       (lastDbQuery.ratingGroup || '') !== (activeRatingGroup || '') ||
       (lastDbQuery.tradeDate || '') !== (normalizedTradeDateFilter || '') ||
+      (lastDbQuery.startDate || '') !== (normalizedStartDateFilter || '') ||
+      (lastDbQuery.endDate || '') !== (normalizedEndDateFilter || '') ||
       (lastDbQuery.exchange || '') !== (normalizedExchangeFilter || '')
     );
-  }, [usingDatabase, lastDbQuery, activeRatingGroup, normalizedTradeDateFilter, normalizedExchangeFilter]);
+  }, [usingDatabase, lastDbQuery, activeRatingGroup, normalizedTradeDateFilter, normalizedStartDateFilter, normalizedEndDateFilter, normalizedExchangeFilter]);
 
   React.useEffect(() => {
     if (!usingDatabase) return;
@@ -925,46 +1005,164 @@ export default function TradePreviewBuilder() {
   }, []);
 
   const filteredRows = useMemo(() => {
+
+    const startDateFilter = filters.startDate ? new Date(filters.startDate) : null;
+
+    if (startDateFilter) startDateFilter.setHours(0, 0, 0, 0);
+
+    const endDateFilter = filters.endDate ? new Date(filters.endDate) : null;
+
+    if (endDateFilter) endDateFilter.setHours(23, 59, 59, 999);
+
+
+
     return rows.filter((row) => {
+
       if (filters.exchange && !row.Exchange.toLowerCase().includes(filters.exchange.toLowerCase())) return false;
+
       if (filters.tradeDate && !row["Trade Date"].includes(filters.tradeDate)) return false;
+
       if (filters.tradeTime && !row["Trade Time"].includes(filters.tradeTime)) return false;
+
       if (filters.isin && !row.ISIN.toLowerCase().includes(filters.isin.toLowerCase())) return false;
+
       if (filters.issuerDetails && !row["Issuer details"].toLowerCase().includes(filters.issuerDetails.toLowerCase())) return false;
+
       if (filters.maturity && !row.Maturity.includes(filters.maturity)) return false;
 
-      const amt = row["Amount (Rs lacs)"];
-      if (filters.minAmt && amt < parseFloat(filters.minAmt)) return false;
-      if (filters.maxAmt && amt > parseFloat(filters.maxAmt)) return false;
 
-      const price = row["Price (Rs)"];
-      if (filters.minPrice && price < parseFloat(filters.minPrice)) return false;
-      if (filters.maxPrice && price > parseFloat(filters.maxPrice)) return false;
 
-      if (filters.yield && !row.Yield.toString().toLowerCase().includes(filters.yield.toLowerCase())) return false;
-      if (filters.status && !row.Status.toLowerCase().includes(filters.status.toLowerCase())) return false;
-      if (filters.dealType && !row["Deal Type"].toLowerCase().includes(filters.dealType.toLowerCase())) return false;
-      if (filters.rating) {
-        const needle = filters.rating.trim().toUpperCase();
-        const tokensSource = Array.isArray(row.RatingParts) && row.RatingParts.length
-          ? row.RatingParts
-          : (row.Rating ? [row.Rating] : []);
-        const ratingTokens = tokensSource
-          .flatMap((token) => String(token).split(/[,\s/]+/))
-          .map((token) => token.replace(/[^A-Z+/-]/gi, "").toUpperCase())
-          .filter(Boolean);
-        const ratingMatches = ratingTokens.some((token) => token.startsWith(needle));
-        if (!ratingMatches) return false;
+      if (startDateFilter || endDateFilter) {
+
+        const rowDateObj = parseDmyToDate(row["Trade Date"]);
+
+        if (!rowDateObj) return false;
+
+        if (startDateFilter && rowDateObj < startDateFilter) return false;
+
+        if (endDateFilter && rowDateObj > endDateFilter) return false;
+
       }
 
+
+
+      const amt = row["Amount (Rs lacs)"];
+
+      if (filters.minAmt && amt < parseFloat(filters.minAmt)) return false;
+
+      if (filters.maxAmt && amt > parseFloat(filters.maxAmt)) return false;
+
+
+
+      const price = row["Price (Rs)"];
+
+      if (filters.minPrice && price < parseFloat(filters.minPrice)) return false;
+
+      if (filters.maxPrice && price > parseFloat(filters.maxPrice)) return false;
+
+
+
+      if (filters.yield && !row.Yield.toString().toLowerCase().includes(filters.yield.toLowerCase())) return false;
+
+      if (filters.status && !row.Status.toLowerCase().includes(filters.status.toLowerCase())) return false;
+
+      if (filters.dealType && !row["Deal Type"].toLowerCase().includes(filters.dealType.toLowerCase())) return false;
+
+      if (filters.rating) {
+
+        const needle = filters.rating.trim().toUpperCase();
+
+        const tokensSource = Array.isArray(row.RatingParts) && row.RatingParts.length
+
+          ? row.RatingParts
+
+          : (row.Rating ? [row.Rating] : []);
+
+        const ratingTokens = tokensSource
+
+          .flatMap((token) => String(token).split(/[|,\s/]+/))
+
+          .map((token) => token.replace(/[^A-Z+/-]/gi, "").toUpperCase())
+
+          .filter(Boolean);
+
+        const ratingMatches = ratingTokens.some((token) => token.startsWith(needle));
+
+        if (!ratingMatches) return false;
+
+      }
+
+
+
       return true;
+
     });
+
   }, [rows, filters]);
+
+  const dateRangeSummary = useMemo(() => {
+    if (!filters.startDate && !filters.endDate) return null;
+
+    let totalAmount = 0;
+    let weightedYieldNumerator = 0;
+    let weightedYieldDenominator = 0;
+
+    filteredRows.forEach((row) => {
+      const amount = toNumeric(row["Amount (Rs lacs)"]) || 0;
+      totalAmount += amount;
+      const yieldVal = toNumeric(row.Yield);
+      if (yieldVal !== null && amount > 0) {
+        weightedYieldNumerator += yieldVal * amount;
+        weightedYieldDenominator += amount;
+      }
+    });
+
+    const formatRangeDate = (value) => {
+      if (!value) return 'N/A';
+      const parsed = new Date(value);
+      if (Number.isNaN(parsed.getTime())) return value;
+      return parsed.toLocaleDateString('en-GB');
+    };
+
+    return {
+      startLabel: formatRangeDate(filters.startDate),
+      endLabel: formatRangeDate(filters.endDate),
+      tradeCount: filteredRows.length,
+      totalAmount,
+      avgYield: weightedYieldDenominator > 0 ? weightedYieldNumerator / weightedYieldDenominator : null,
+    };
+  }, [filteredRows, filters.startDate, filters.endDate]);
 
   const hasActiveFilters = useMemo(
     () => Object.entries(filters).some(([key, value]) => value !== FILTER_DEFAULTS[key]),
     [filters]
   );
+
+  useEffect(() => {
+
+    if (!hasActiveFilters) {
+
+      setShowAggregated(false);
+
+    }
+
+  }, [hasActiveFilters]);
+
+
+  useEffect(() => {
+    if (showAggregated) {
+      setShowAggregated(false);
+    }
+  }, [filtersSignature]);
+
+
+  useEffect(() => {
+
+    setBucketPageMap({});
+
+  }, [filtersSignature, filteredRows.length, showAggregated, summarySearch]);
+
+
 
   const maxRatingColumns = useMemo(() => {
     const maxParts = rows.reduce((max, row) => {
@@ -986,6 +1184,7 @@ export default function TradePreviewBuilder() {
   }, [maxRatingColumns]);
 
   const ratingSummaries = useMemo(() => {
+    if (!showAggregated) return [];
     if (filteredRows.length === 0) return [];
 
     const ratingBucketMap = new Map();
@@ -1081,11 +1280,12 @@ export default function TradePreviewBuilder() {
 
     results.sort((a, b) => a.rating.localeCompare(b.rating));
     return results;
-  }, [filteredRows]);
+  }, [filteredRows, showAggregated]);
 
   const normalizedSummarySearch = summarySearch.trim().toLowerCase();
 
   const filteredRatingSummaries = useMemo(() => {
+    if (!showAggregated) return [];
     if (!normalizedSummarySearch) return ratingSummaries;
 
     const uppercaseSearch = summarySearch.trim().toUpperCase();
@@ -1137,7 +1337,7 @@ export default function TradePreviewBuilder() {
         return null;
       })
       .filter(Boolean);
-  }, [ratingSummaries, normalizedSummarySearch, summarySearch]);
+  }, [ratingSummaries, normalizedSummarySearch, summarySearch, showAggregated]);
 
   const ratingPages = Math.max(1, Math.ceil(filteredRatingSummaries.length / ratingsPerPage));
   const currentRatingPage = Math.min(ratingPage, ratingPages);
@@ -1242,7 +1442,7 @@ export default function TradePreviewBuilder() {
             <div>
               <h3 className="flex items-center gap-3 text-2xl font-bold text-slate-800">
                 <span className="inline-flex h-11 w-11 items-center justify-center rounded-full bg-blue-100 text-2xl text-blue-600" aria-hidden="true">
-                  📂
+                  ??
                 </span>
                 Upload Trading Files
               </h3>
@@ -1364,7 +1564,7 @@ export default function TradePreviewBuilder() {
                       </>
                     ) : (
                       <>
-                        <span aria-hidden="true">→</span>
+                        <span aria-hidden="true">?</span>
                         <span>Build Preview</span>
                       </>
                   )}
@@ -1387,25 +1587,25 @@ export default function TradePreviewBuilder() {
             <ul className="mt-3 grid gap-3 text-sm text-blue-900 sm:grid-cols-2">
               <li className="flex items-start gap-2">
                 <span className="mt-0.5 inline-flex h-5 w-5 flex-shrink-0 items-center justify-center rounded-full bg-white text-blue-600 ring-1 ring-inset ring-blue-200" aria-hidden="true">
-                  ✓
+                  ?
                 </span>
                 <span>Upload multiple Excel files at once.</span>
               </li>
               <li className="flex items-start gap-2">
                 <span className="mt-0.5 inline-flex h-5 w-5 flex-shrink-0 items-center justify-center rounded-full bg-white text-blue-600 ring-1 ring-inset ring-blue-200" aria-hidden="true">
-                  ✓
+                  ?
                 </span>
                 <span>Select an entire folder containing Excel files.</span>
               </li>
               <li className="flex items-start gap-2">
                 <span className="mt-0.5 inline-flex h-5 w-5 flex-shrink-0 items-center justify-center rounded-full bg-white text-blue-600 ring-1 ring-inset ring-blue-200" aria-hidden="true">
-                  ✓
+                  ?
                 </span>
                 <span>Drag & drop files directly from your file explorer.</span>
               </li>
               <li className="flex items-start gap-2">
                 <span className="mt-0.5 inline-flex h-5 w-5 flex-shrink-0 items-center justify-center rounded-full bg-white text-blue-600 ring-1 ring-inset ring-blue-200" aria-hidden="true">
-                  ✓
+                  ?
                 </span>
                 <span>All sheets in each workbook will be processed.</span>
               </li>
@@ -1419,7 +1619,7 @@ export default function TradePreviewBuilder() {
               {serverSyncing && (
                 <span className="flex items-center gap-2 text-xs font-semibold text-blue-600">
                   <span className="inline-flex h-2.5 w-2.5 animate-ping rounded-full bg-blue-500/70" />
-                  Syncing…
+                  Syncing�
                 </span>
               )}
             </div>
@@ -1503,7 +1703,74 @@ export default function TradePreviewBuilder() {
                 </button>
               </div>
             </header>
-            <div className="flex flex-wrap items-center gap-2 border-b border-blue-100/60 bg-blue-50/30 px-4 py-3 text-sm text-blue-900 sm:px-6 sm:text-base">
+                        <div className="flex flex-col gap-4 border-b border-blue-100/60 bg-blue-50/40 px-4 py-4 sm:px-6">
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:gap-4">
+                <label className="flex flex-col text-xs font-semibold text-blue-900 sm:text-sm">
+                  <span>Start Date</span>
+                  <input
+                    type="date"
+                    value={filters.startDate}
+                    onChange={(e) => setFilters((prev) => ({ ...prev, startDate: e.target.value }))}
+                    className="mt-1 rounded-md border border-blue-200 px-3 py-1 text-sm text-slate-700 focus:border-blue-500 focus:ring-blue-500"
+                  />
+                </label>
+                <label className="flex flex-col text-xs font-semibold text-blue-900 sm:text-sm">
+                  <span>End Date</span>
+                  <input
+                    type="date"
+                    value={filters.endDate}
+                    onChange={(e) => setFilters((prev) => ({ ...prev, endDate: e.target.value }))}
+                    className="mt-1 rounded-md border border-blue-200 px-3 py-1 text-sm text-slate-700 focus:border-blue-500 focus:ring-blue-500"
+                  />
+                </label>
+                <div className="flex flex-wrap items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => fetchFromDatabase({ allowEmptyFilters: true })}
+                    className="rounded-md bg-indigo-600 px-4 py-2 text-sm font-semibold text-white shadow hover:bg-indigo-500 disabled:opacity-60"
+                    disabled={busy}
+                  >
+                    Apply Date Filter
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setFilters((prev) => ({ ...prev, startDate: '', endDate: '' }))}
+                    className="rounded-md border border-indigo-300 px-4 py-2 text-sm font-semibold text-indigo-600 hover:bg-indigo-50 disabled:opacity-60"
+                    disabled={!filters.startDate && !filters.endDate}
+                  >
+                    Clear Range
+                  </button>
+                </div>
+              </div>
+              {dateRangeSummary && (
+                <div className="flex flex-wrap items-center gap-4 text-sm text-blue-900">
+                  <span><strong>From:</strong> {dateRangeSummary.startLabel}</span>
+                  <span><strong>To:</strong> {dateRangeSummary.endLabel}</span>
+                  <span><strong>Trades:</strong> {dateRangeSummary.tradeCount.toLocaleString()}</span>
+                  <span><strong>Total Amount (Lacs):</strong> {dateRangeSummary.totalAmount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                  <span><strong>Avg Yield:</strong> {dateRangeSummary.avgYield !== null ? `${dateRangeSummary.avgYield.toFixed(2)}%` : 'N/A'}</span>
+                </div>
+              )}
+              <div className="flex flex-wrap items-center gap-2">
+                <button
+                  type="button"
+                  onClick={handleShowAggregated}
+                  className="rounded-md bg-slate-900 px-4 py-2 text-sm font-semibold text-white shadow hover:bg-slate-700 disabled:opacity-60"
+                  disabled={!hasActiveFilters || filteredRows.length === 0 || showAggregated}
+                >
+                  Show Aggregated Summary
+                </button>
+                {showAggregated && (
+                  <button
+                    type="button"
+                    onClick={handleHideAggregated}
+                    className="rounded-md border border-slate-400 px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-100"
+                  >
+                    Hide Aggregated Summary
+                  </button>
+                )}
+              </div>
+            </div><div className="flex flex-wrap items-center gap-2 border-b border-blue-100/60 bg-blue-50/30 px-4 py-3 text-sm text-blue-900 sm:px-6 sm:text-base">
               <span className="font-semibold uppercase tracking-wide text-blue-700/80">
                 Rating quick select:
               </span>
@@ -1865,7 +2132,7 @@ export default function TradePreviewBuilder() {
               )}
             </div>
 
-            {ratingSummaries.length > 0 && (
+            {showAggregated && (
               <div className="tp-card tp-aggregated px-6 py-6 bg-slate-50 border-t border-gray-200">
                 <div className="tp-aggregated-header flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between mb-4">
                   <h3 className="text-lg font-semibold text-gray-800">Aggregated View</h3>
@@ -1907,13 +2174,40 @@ export default function TradePreviewBuilder() {
                           <div className="divide-y divide-slate-200">
                             {buckets.map(({ key, label, rows }) => {
                               const bucketTheme = BUCKET_THEME_CLASSES[key] || BUCKET_THEME_CLASSES.default;
+                              const bucketKeyId = `${rating}-${key}`;
+                              const totalBucketPages = Math.max(1, Math.ceil(rows.length / AGGREGATE_ROWS_PER_PAGE));
+                              const currentBucketPage = bucketPageMap[bucketKeyId] || 1;
+                              const pagedRows = rows.slice((currentBucketPage - 1) * AGGREGATE_ROWS_PER_PAGE, currentBucketPage * AGGREGATE_ROWS_PER_PAGE);
                               return (
                                 <div key={`${rating}-${key}`} className="tp-summary-bucket bg-white px-2 sm:px-4 pb-6">
                                   <div className={`flex items-center gap-3 px-4 sm:px-6 py-4 text-base font-semibold uppercase tracking-[0.18em] shadow-sm ${bucketTheme}`}>
                                     <span className="inline-block h-2.5 w-2.5 rounded-full bg-white/80" aria-hidden="true" />
                                     <span>{label}</span>
                                   </div>
-                                  <VirtualizedSummaryTable rows={rows} />
+                                  <VirtualizedSummaryTable rows={pagedRows} />
+                                  {totalBucketPages > 1 && (
+                                    <div className="flex items-center justify-between px-4 py-2 text-xs text-slate-600">
+                                      <span>Page {currentBucketPage} of {totalBucketPages}</span>
+                                      <div className="flex gap-2">
+                                        <button
+                                          type="button"
+                                          onClick={() => handleBucketPageChange(bucketKeyId, currentBucketPage - 1, totalBucketPages)}
+                                          className="rounded border border-slate-300 px-2 py-1 hover:bg-slate-100 disabled:opacity-50"
+                                          disabled={currentBucketPage === 1}
+                                        >
+                                          Prev
+                                        </button>
+                                        <button
+                                          type="button"
+                                          onClick={() => handleBucketPageChange(bucketKeyId, currentBucketPage + 1, totalBucketPages)}
+                                          className="rounded border border-slate-300 px-2 py-1 hover:bg-slate-100 disabled:opacity-50"
+                                          disabled={currentBucketPage === totalBucketPages}
+                                        >
+                                          Next
+                                        </button>
+                                      </div>
+                                    </div>
+                                  )}
                                 </div>
                               );
                             })}
@@ -1990,4 +2284,5 @@ export default function TradePreviewBuilder() {
     </div>
   );
 }
+
 
