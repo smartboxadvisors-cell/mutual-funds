@@ -110,8 +110,14 @@ const norm = (str) => String(str || "").toLowerCase().replace(/\s+/g, "");
 const firstCol = (headers, patterns) => {
   const normHeaders = headers.map(norm);
   for (const pattern of patterns) {
-    const idx = normHeaders.findIndex((h) => h.includes(norm(pattern)));
-    if (idx !== -1) return idx;
+    const target = norm(pattern);
+    const exactIdx = normHeaders.findIndex((h) => h === target);
+    if (exactIdx !== -1) return exactIdx;
+  }
+  for (const pattern of patterns) {
+    const target = norm(pattern);
+    const partialIdx = normHeaders.findIndex((h) => h.includes(target));
+    if (partialIdx !== -1) return partialIdx;
   }
   return -1;
 };
