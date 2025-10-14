@@ -75,11 +75,11 @@ const makeRegex = (value) => new RegExp(escapeRegex(value), 'i');
 
 function parseNumericValue(value) {
   if (value === null || value === undefined) return null;
-  if (typeof value === 'number') {
+  if (typeof value === "number") {
     return Number.isFinite(value) ? value : null;
   }
   const cleaned = String(value)
-    .replace(/[,₹]/g, '')
+    .replace(/[^0-9.+-]/g, "")
     .trim();
   if (!cleaned) return null;
   const numeric = Number(cleaned);
@@ -97,7 +97,7 @@ function parseDateValue(value) {
     const date = new Date(excelEpoch.getTime() + value * msPerDay);
     return Number.isNaN(date.getTime()) ? null : date;
   }
-  const raw = String(value).trim();
+  const raw = String(value) .trim();
   if (!raw) return null;
   const normalized = raw.replace(/\./g, '/').replace(/-/g, '/');
   const dateMatch = normalized.match(
@@ -175,7 +175,7 @@ async function refreshHoldingRatingsCache() {
   documents.forEach((doc) => {
     const isin = normalizeIsin(doc.isin);
     if (!isin) return;
-    const ratingValue = String(doc.rating || '').trim();
+    const ratingValue = String(doc.rating || '') .trim();
     if (!ratingValue) return;
 
     ratingsMap[isin] = ratingValue;
@@ -496,7 +496,7 @@ async function parseCSVData(buffer, detectedExchange = 'UNKNOWN') {
     }
 
     for (let i = startIndex; i < lines.length; i++) {
-      const line = lines[i].trim();
+      const line = lines[i] .trim();
       if (!line) continue;
 
       const columns = parseCSVLine(line);
@@ -675,31 +675,31 @@ async function parseExcelData(buffer, detectedExchange = 'UNKNOWN') {
           const lowerHeader = header.toLowerCase();
 
           if (lowerHeader.includes('sr no') || lowerHeader.includes('s.no') || lowerHeader.includes('serial') || lowerHeader.includes('no')) {
-            bseData.serialNo = String(row[index] || '').trim();
+            bseData.serialNo = String(row[index] || '') .trim();
           } else if (lowerHeader.includes('isin')) {
-            bseData.isin = String(row[index] || '').trim();
+            bseData.isin = String(row[index] || '') .trim();
           } else if (lowerHeader.includes('symbol') || lowerHeader.includes('scrip')) {
-            bseData.symbol = String(row[index] || '').trim();
+            bseData.symbol = String(row[index] || '') .trim();
           } else if (lowerHeader.includes('issuer') || lowerHeader.includes('company') || lowerHeader.includes('name')) {
-            bseData.issuerName = String(row[index] || '').trim();
+            bseData.issuerName = String(row[index] || '') .trim();
           } else if (lowerHeader.includes('coupon') || lowerHeader.includes('%') || lowerHeader.includes('rate')) {
-            bseData.coupon = String(row[index] || '').trim();
+            bseData.coupon = String(row[index] || '') .trim();
           } else if (lowerHeader.includes('maturity')) {
-            bseData.maturityDate = String(row[index] || '').trim();
+            bseData.maturityDate = String(row[index] || '') .trim();
           } else if (lowerHeader.includes('deal date') || lowerHeader.includes('date') || lowerHeader.includes('trade date')) {
-            bseData.dealDate = String(row[index] || '').trim();
+            bseData.dealDate = String(row[index] || '') .trim();
           } else if (lowerHeader.includes('settlement')) {
-            bseData.settlementType = String(row[index] || '').trim();
+            bseData.settlementType = String(row[index] || '') .trim();
           } else if (lowerHeader.includes('amount') || lowerHeader.includes('value') || lowerHeader.includes('trade amount')) {
-            bseData.tradeAmount = String(row[index] || '').trim();
+            bseData.tradeAmount = String(row[index] || '') .trim();
           } else if (lowerHeader.includes('price') || lowerHeader.includes('trade price')) {
-            bseData.tradePrice = String(row[index] || '').trim();
+            bseData.tradePrice = String(row[index] || '') .trim();
           } else if (lowerHeader.includes('yield') || lowerHeader.includes('traded yield')) {
-            bseData.yield = String(row[index] || '').trim();
+            bseData.yield = String(row[index] || '') .trim();
           } else if (lowerHeader.includes('time') || lowerHeader.includes('trade time')) {
-            bseData.tradeTime = String(row[index] || '').trim();
+            bseData.tradeTime = String(row[index] || '') .trim();
           } else if (lowerHeader.includes('order') || lowerHeader.includes('type')) {
-            bseData.orderType = String(row[index] || '').trim();
+            bseData.orderType = String(row[index] || '') .trim();
           }
         });
 
@@ -718,29 +718,29 @@ async function parseExcelData(buffer, detectedExchange = 'UNKNOWN') {
           const lowerHeader = header.toLowerCase();
 
           if (lowerHeader.includes('maturity')) {
-            nseData.maturityDate = String(row[index] || '').trim();
+            nseData.maturityDate = String(row[index] || '') .trim();
           } else if (lowerHeader.includes('seller') && lowerHeader.includes('deal')) {
-            nseData.sellerDealType = String(row[index] || '').trim();
+            nseData.sellerDealType = String(row[index] || '') .trim();
           } else if (lowerHeader.includes('buyer') && lowerHeader.includes('deal')) {
-            nseData.buyerDealType = String(row[index] || '').trim();
+            nseData.buyerDealType = String(row[index] || '') .trim();
           } else if (lowerHeader.includes('isin')) {
-            nseData.isin = String(row[index] || '').trim();
+            nseData.isin = String(row[index] || '') .trim();
           } else if (lowerHeader.includes('description') || lowerHeader.includes('security') || lowerHeader.includes('name')) {
-            nseData.description = String(row[index] || '').trim();
+            nseData.description = String(row[index] || '') .trim();
           } else if (lowerHeader.includes('price') || lowerHeader.includes('rate')) {
-            nseData.price = String(row[index] || '').trim();
+            nseData.price = String(row[index] || '') .trim();
           } else if (lowerHeader.includes('deal size') || lowerHeader.includes('size') || lowerHeader.includes('quantity') || lowerHeader.includes('qty')) {
-            nseData.dealSize = String(row[index] || '').trim();
+            nseData.dealSize = String(row[index] || '') .trim();
           } else if (lowerHeader.includes('settlement status') || lowerHeader.includes('status')) {
-            nseData.settlementStatus = String(row[index] || '').trim();
+            nseData.settlementStatus = String(row[index] || '') .trim();
           } else if (lowerHeader.includes('yield')) {
-            nseData.yield = String(row[index] || '').trim();
+            nseData.yield = String(row[index] || '') .trim();
           } else if (lowerHeader.includes('time') || lowerHeader.includes('trade time')) {
-            nseData.tradeTime = String(row[index] || '').trim();
+            nseData.tradeTime = String(row[index] || '') .trim();
           } else if (lowerHeader.includes('settlement date') || lowerHeader.includes('settle date')) {
-            nseData.settlementDate = String(row[index] || '').trim();
+            nseData.settlementDate = String(row[index] || '') .trim();
           } else if (lowerHeader.includes('deal date') || lowerHeader.includes('trade date') || (lowerHeader.includes('date') && !lowerHeader.includes('settlement'))) {
-            nseData.date = String(row[index] || '').trim();
+            nseData.date = String(row[index] || '') .trim();
           }
         });
 
@@ -771,7 +771,7 @@ function formatBSETradeTime(timeValue) {
   }
   
   // If it's already a string in HH:MM or HH:MM:SS format
-  const timeStr = String(timeValue).trim();
+  const timeStr = String(timeValue) .trim();
   if (/^\d{1,2}:\d{2}(:\d{2})?$/.test(timeStr)) {
     if (timeStr.split(':').length === 2) {
       return `${timeStr}:00`;
@@ -804,7 +804,7 @@ function formatMaturityDate(dateValue) {
     return `${dd}/${mm}/${yyyy}`;
   }
 
-  const dateStr = String(dateValue).trim();
+  const dateStr = String(dateValue) .trim();
   if (!dateStr) return '';
 
   const normalized = dateStr.replace(/[-.]/g, '/');
@@ -863,7 +863,7 @@ function formatMaturityDate(dateValue) {
 function formatNSETradeTime(dateTimeValue) {
   if (!dateTimeValue) return '';
   
-  const dateTimeStr = String(dateTimeValue).trim();
+  const dateTimeStr = String(dateTimeValue) .trim();
   
   // Pattern: DD-MM-YYYY HH:MM:SS or similar
   const match = dateTimeStr.match(/(\d{1,2}[-\/]\d{1,2}[-\/]\d{4})\s+(\d{1,2}:\d{2}:\d{2})/);
@@ -903,18 +903,18 @@ function transformRowToUnifiedTransaction(row, rowNumber, exchangeType) {
 
     if (exchangeType === 'BSE') {
       // BSE format mapping
-      symbol = String(row.symbol || '').trim();
+      symbol = String(row.symbol || '') .trim();
       isin = normalizeIsin(row.isin || '');
-      issuerName = String(row.issuerName || '').trim();
-      coupon = String(row.coupon || '').trim();
+      issuerName = String(row.issuerName || '') .trim();
+      coupon = String(row.coupon || '') .trim();
       maturityDate = formatMaturityDate(row.maturityDate || '');
       tradeDate = formatMaturityDate(row.dealDate || '');
-      settlementType = String(row.settlementType || '').trim();
-      tradeAmount = String(row.tradeAmount || '').trim();
-      tradePrice = String(row.tradePrice || '').trim();
-      yieldValue = String(row.yield || '').trim();
+      settlementType = String(row.settlementType || '') .trim();
+      tradeAmount = String(row.tradeAmount || '') .trim();
+      tradePrice = String(row.tradePrice || '') .trim();
+      yieldValue = String(row.yield || '') .trim();
       tradeTime = formatBSETradeTime(row.tradeTime || '');
-      orderType = String(row.orderType || '').trim();
+      orderType = String(row.orderType || '') .trim();
       
       // Get rating from master/holdings
       rating = masterRatings[isin] || holdingRatings[isin] || '';
@@ -948,7 +948,7 @@ function transformRowToUnifiedTransaction(row, rowNumber, exchangeType) {
     } else if (exchangeType === 'NSE') {
       // NSE format mapping
       isin = normalizeIsin(row.isin || '');
-      issuerName = String(row.description || '').trim();
+      issuerName = String(row.description || '') .trim();
 
       // Extract symbol from description for NSE
       if (issuerName) {
@@ -968,11 +968,11 @@ function transformRowToUnifiedTransaction(row, rowNumber, exchangeType) {
 
       maturityDate = formatMaturityDate(row.maturityDate || '');
       tradeDate = formatMaturityDate(row.date || '');
-      tradeAmount = String(row.dealSize || '').trim();
-      tradePrice = String(row.price || '').trim();
-      yieldValue = String(row.yield || '').trim();
+      tradeAmount = String(row.dealSize || '') .trim();
+      tradePrice = String(row.price || '') .trim();
+      yieldValue = String(row.yield || '') .trim();
       tradeTime = formatNSETradeTime(row.tradeTime || '');
-      settlementStatus = String(row.settlementStatus || '').trim();
+      settlementStatus = String(row.settlementStatus || '') .trim();
       settlementDate = formatMaturityDate(row.settlementDate || '');
       
       // Get rating from master/holdings
@@ -1119,7 +1119,7 @@ router.post('/upload-master', upload.single('file'), async (req, res) => {
       if (!normalizedIsin) continue;
 
       const rawRating = row[ratingIdx];
-      const ratingRaw = String(rawRating || '').trim();
+      const ratingRaw = String(rawRating || '') .trim();
       const ratingFormatted = formatMasterRatingValue(ratingRaw);
       const ratingGroup = computeRatingGroup(ratingFormatted || ratingRaw);
 
@@ -1289,7 +1289,7 @@ router.get('/transactions', async (req, res) => {
     const filters = {};
     const applied = {};
 
-    const selectedRating = (ratingGroup || rating || '').toString().trim();
+    const selectedRating = (ratingGroup || rating || '').toString() .trim();
     if (selectedRating) {
       const normalizedRating = selectedRating.toUpperCase();
       filters.ratingGroup = normalizedRating;
@@ -1343,7 +1343,7 @@ router.get('/transactions', async (req, res) => {
     }
 
     if (tradeTimeFilter) {
-      const trimmed = tradeTimeFilter.toString().trim();
+      const trimmed = tradeTimeFilter.toString() .trim();
       if (trimmed) {
         filters.tradeTime = { $regex: makeRegex(trimmed) };
         applied.tradeTime = trimmed;
@@ -1359,7 +1359,7 @@ router.get('/transactions', async (req, res) => {
     }
 
     if (issuer) {
-      const trimmed = issuer.toString().trim();
+      const trimmed = issuer.toString() .trim();
       if (trimmed) {
         filters.issuerName = { $regex: makeRegex(trimmed) };
         applied.issuer = trimmed;
@@ -1367,7 +1367,7 @@ router.get('/transactions', async (req, res) => {
     }
 
     if (dealType) {
-      const trimmed = dealType.toString().trim();
+      const trimmed = dealType.toString() .trim();
       if (trimmed) {
         filters.orderType = { $regex: makeRegex(trimmed) };
         applied.dealType = trimmed;
@@ -1375,7 +1375,7 @@ router.get('/transactions', async (req, res) => {
     }
 
     if (status) {
-      const trimmed = status.toString().trim();
+      const trimmed = status.toString() .trim();
       if (trimmed) {
         filters.settlementStatus = { $regex: makeRegex(trimmed) };
         applied.status = trimmed;
@@ -1398,7 +1398,7 @@ router.get('/transactions', async (req, res) => {
     }
 
     if (yieldFilter) {
-      const trimmed = yieldFilter.toString().trim();
+      const trimmed = yieldFilter.toString() .trim();
       const numericYield = parseNumericValue(trimmed);
       if (numericYield !== null) {
         const tolerance = 0.0000001;
