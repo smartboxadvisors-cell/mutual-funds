@@ -549,8 +549,8 @@ async function parseCSVData(buffer, detectedExchange = 'UNKNOWN') {
         headers.forEach((header, index) => {
           const lowerHeader = header.toLowerCase();
 
-          if (lowerHeader.includes('date') || lowerHeader.includes('trade date')) {
-            nseData.date = columns[index]?.trim() || '';
+          if (lowerHeader.includes('maturity')) {
+            nseData.maturityDate = columns[index]?.trim() || '';
           } else if (lowerHeader.includes('seller') && lowerHeader.includes('deal')) {
             nseData.sellerDealType = columns[index]?.trim() || '';
           } else if (lowerHeader.includes('buyer') && lowerHeader.includes('deal')) {
@@ -571,8 +571,8 @@ async function parseCSVData(buffer, detectedExchange = 'UNKNOWN') {
             nseData.tradeTime = columns[index]?.trim() || '';
           } else if (lowerHeader.includes('settlement date') || lowerHeader.includes('settle date')) {
             nseData.settlementDate = columns[index]?.trim() || '';
-          } else if (lowerHeader.includes('maturity')) {
-            nseData.maturityDate = columns[index]?.trim() || '';
+          } else if (lowerHeader.includes('deal date') || lowerHeader.includes('trade date') || (lowerHeader.includes('date') && !lowerHeader.includes('settlement'))) {
+            nseData.date = columns[index]?.trim() || '';
           }
         });
 
@@ -712,8 +712,8 @@ async function parseExcelData(buffer, detectedExchange = 'UNKNOWN') {
         firstRow.forEach((header, index) => {
           const lowerHeader = header.toLowerCase();
 
-          if (lowerHeader.includes('date') || lowerHeader.includes('trade date')) {
-            nseData.date = String(row[index] || '').trim();
+          if (lowerHeader.includes('maturity')) {
+            nseData.maturityDate = String(row[index] || '').trim();
           } else if (lowerHeader.includes('seller') && lowerHeader.includes('deal')) {
             nseData.sellerDealType = String(row[index] || '').trim();
           } else if (lowerHeader.includes('buyer') && lowerHeader.includes('deal')) {
@@ -734,8 +734,8 @@ async function parseExcelData(buffer, detectedExchange = 'UNKNOWN') {
             nseData.tradeTime = String(row[index] || '').trim();
           } else if (lowerHeader.includes('settlement date') || lowerHeader.includes('settle date')) {
             nseData.settlementDate = String(row[index] || '').trim();
-          } else if (lowerHeader.includes('maturity')) {
-            nseData.maturityDate = String(row[index] || '').trim();
+          } else if (lowerHeader.includes('deal date') || lowerHeader.includes('trade date') || (lowerHeader.includes('date') && !lowerHeader.includes('settlement'))) {
+            nseData.date = String(row[index] || '').trim();
           }
         });
 

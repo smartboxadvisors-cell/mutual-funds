@@ -737,7 +737,7 @@ export default function TradePreviewBuilder() {
           }
         } else if (effectiveExchange === "NSE") {
           const isinIdx = firstCol(headers, ["isin"]);
-          const dateIdx = firstCol(headers, ["deal date", "date", "trade date"]);
+          const dateIdx = firstCol(headers, ["trade date", "deal date", "date"]);
           const timeIdx = firstCol(headers, ["trade time", "time", "timestamp"]);
           const maturityIdx = firstCol(headers, ["maturity date", "maturity"]);
           const dealSizeIdx = firstCol(headers, ["deal size", "trade amount (rs)", "amount"]);
@@ -786,7 +786,7 @@ export default function TradePreviewBuilder() {
           }
         } else if (effectiveExchange === "BSE") {
           const isinIdx = firstCol(headers, ["isin"]);
-          const dateIdx = firstCol(headers, ["deal date", "trade date", "date"]);
+          const dateIdx = firstCol(headers, ["trade date", "deal date", "date"]);
           const timeIdx = firstCol(headers, ["trade time", "time"]);
           const maturityIdx = firstCol(headers, ["maturity date", "maturity"]);
           const amountIdx = firstCol(headers, ["trade amount (in rs lacs)", "amount (rs lacs)", "amount"]);
