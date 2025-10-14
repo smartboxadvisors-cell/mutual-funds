@@ -27,6 +27,12 @@ export default function Navigation() {
           >
             Trading
           </Link>
+          <Link
+            to="/portfolio"
+            className={`${styles.navLink} ${location.pathname === '/portfolio' ? styles.active : ''}`}
+          >
+            Portfolio
+          </Link>
         </div>
 
         <div className={styles.userInfo}>

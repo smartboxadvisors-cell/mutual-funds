@@ -1,8 +1,8 @@
 import { BrowserRouter as Router, Route, Routes, Navigate } from 'react-router-dom';
 import ImportsTable from './components/ImportsTable';
 import Login from './components/Login';
-import Portfolio from './components/Portfolio'; // <-- new
 import Trading from './components/Trading'; // <-- new trading component
+import Portfolio from './components/Portfolio'; // <-- new portfolio component
 import Navigation from './components/Navigation'; // <-- new navigation
 import './App.css';
 
@@ -43,9 +43,9 @@ export default function App() {
           }
         />
 
-        {/* NEW: protected user route like /shivam, /bhumit */}
+        {/* Portfolio Dashboard */}
         <Route
-          path="/:username"
+          path="/portfolio"
           element={
             <ProtectedRoute>
               <div>
@@ -55,6 +55,7 @@ export default function App() {
             </ProtectedRoute>
           }
         />
+
       </Routes>
     </Router>
   );

@@ -1,0 +1,509 @@
+openapi: 3.0.3
+info:
+  title: Portfolio API
+  description: API endpoints for managing equity portfolio with FIFO position tracking
+  version: 1.0.0
+
+servers:
+  - url: http://localhost:5000/api
+    description: Local development server
+  - url: https://your-production-domain.com/api
+    description: Production server
+
+paths:
+  /portfolio:
+    get:
+      summary: Get complete portfolio
+      description: Returns holdings, sold transactions, and summary for a user
+      tags:
+        - Portfolio
+      parameters:
+        - name: userId
+          in: query
+          description: User ID (required if not authenticated)
+          schema:
+            type: string
+            format: objectid
+      responses:
+        '200':
+          description: Portfolio data retrieved successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PortfolioResponse'
+        '400':
+          description: Bad request - userId missing
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /portfolio/holdings:
+    get:
+      summary: Get holdings with pagination
+      description: Returns only the holdings array with pagination support
+      tags:
+        - Portfolio
+      parameters:
+        - name: userId
+          in: query
+          description: User ID
+          schema:
+            type: string
+            format: objectid
+        - name: page
+          in: query
+          description: Page number
+          schema:
+            type: integer
+            minimum: 1
+            default: 1
+        - name: limit
+          in: query
+          description: Items per page
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 1000
+            default: 100
+        - name: sort
+          in: query
+          description: Sort field
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Holdings retrieved successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Holding'
+                  pagination:
+                    $ref: '#/components/schemas/Pagination'
+        '400':
+          description: Bad request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /portfolio/sold:
+    get:
+      summary: Get sold transactions with pagination
+      description: Returns only the realized sold transactions with pagination
+      tags:
+        - Portfolio
+      parameters:
+        - name: userId
+          in: query
+          description: User ID
+          schema:
+            type: string
+            format: objectid
+        - name: page
+          in: query
+          description: Page number
+          schema:
+            type: integer
+            minimum: 1
+            default: 1
+        - name: limit
+          in: query
+          description: Items per page
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 1000
+            default: 100
+      responses:
+        '200':
+          description: Sold transactions retrieved successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/SoldTransaction'
+                  pagination:
+                    $ref: '#/components/schemas/Pagination'
+
+  /portfolio/transactions:
+    post:
+      summary: Add a new transaction
+      description: Create a new BUY or SELL transaction
+      tags:
+        - Portfolio
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TransactionInput'
+      responses:
+        '201':
+          description: Transaction created successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: Transaction added successfully
+                  transaction:
+                    $ref: '#/components/schemas/Transaction'
+        '400':
+          description: Validation error or oversell attempt
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /portfolio/prices:
+    post:
+      summary: Bulk upsert price snapshots
+      description: Admin/utility endpoint to update current market prices for ISINs
+      tags:
+        - Portfolio
+        - Admin
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: array
+              items:
+                $ref: '#/components/schemas/PriceUpdate'
+              minItems: 1
+      responses:
+        '200':
+          description: Prices updated successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                  upsertedCount:
+                    type: integer
+                  modifiedCount:
+                    type: integer
+        '400':
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /portfolio/issuers/{isin}:
+    get:
+      summary: Get issuer by ISIN
+      description: Retrieve issuer metadata for modal display
+      tags:
+        - Portfolio
+      parameters:
+        - name: isin
+          in: path
+          required: true
+          description: ISIN code
+          schema:
+            type: string
+            example: INE467B01029
+      responses:
+        '200':
+          description: Issuer found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Issuer'
+        '404':
+          description: Issuer not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+components:
+  schemas:
+    PortfolioResponse:
+      type: object
+      properties:
+        summary:
+          $ref: '#/components/schemas/Summary'
+        holdings:
+          type: array
+          items:
+            $ref: '#/components/schemas/Holding'
+        sold:
+          type: array
+          items:
+            $ref: '#/components/schemas/SoldTransaction'
+
+    Summary:
+      type: object
+      properties:
+        investment:
+          type: number
+          description: Total investment amount
+          example: 2500000
+        current:
+          type: number
+          description: Current portfolio value
+          example: 3150000
+        pnl:
+          type: number
+          description: Profit & Loss
+          example: 650000
+        totalQty:
+          type: number
+          description: Total quantity of shares
+          example: 520
+
+    Holding:
+      type: object
+      properties:
+        isin:
+          type: string
+          example: INE467B01029
+        company:
+          type: string
+          example: Tata Motors Ltd
+        sector:
+          type: string
+          example: Auto
+        rating:
+          type: string
+          example: BBB+
+        marketCap:
+          type: string
+          example: ₹3.5L cr
+        week52High:
+          type: number
+          example: 1150
+        week52Low:
+          type: number
+          example: 550
+        description:
+          type: string
+          example: India's leading automotive OEM with PV & CV portfolio.
+        quantity:
+          type: number
+          example: 250
+        purchase_date:
+          type: string
+          format: date-time
+          example: 2023-02-14T00:00:00.000Z
+        buy_price:
+          type: number
+          format: float
+          example: 450.00
+        current_price:
+          type: number
+          format: float
+          example: 715.00
+        trade_count:
+          type: integer
+          example: 8
+        avg_holding_days:
+          type: integer
+          example: 320
+        interest_score:
+          type: number
+          format: float
+          minimum: 0
+          maximum: 1
+          example: 0.8
+
+    SoldTransaction:
+      type: object
+      properties:
+        isin:
+          type: string
+          example: INE009A01021
+        company:
+          type: string
+          example: Infosys Ltd
+        quantity:
+          type: number
+          example: 100
+        buy_price:
+          type: number
+          format: float
+          example: 1350.00
+        sell_price:
+          type: number
+          format: float
+          example: 1580.00
+        purchase_date:
+          type: string
+          format: date-time
+          example: 2023-03-10T00:00:00.000Z
+        sell_date:
+          type: string
+          format: date-time
+          example: 2024-01-25T00:00:00.000Z
+
+    Transaction:
+      type: object
+      properties:
+        _id:
+          type: string
+          format: objectid
+        user_id:
+          type: string
+          format: objectid
+        isin:
+          type: string
+        company:
+          type: string
+        type:
+          type: string
+          enum: [BUY, SELL]
+        share_count:
+          type: integer
+          minimum: 1
+        price:
+          type: number
+          minimum: 0
+        trade_date:
+          type: string
+          format: date-time
+        source:
+          type: string
+          example: manual
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    TransactionInput:
+      type: object
+      required:
+        - type
+        - isin
+        - company
+        - share_count
+        - price
+        - trade_date
+      properties:
+        type:
+          type: string
+          enum: [BUY, SELL]
+          example: BUY
+        isin:
+          type: string
+          example: INE467B01029
+        company:
+          type: string
+          example: Tata Motors Ltd
+        share_count:
+          type: integer
+          minimum: 1
+          example: 100
+        price:
+          type: number
+          minimum: 0
+          example: 450.50
+        trade_date:
+          type: string
+          format: date
+          example: 2024-03-10
+        source:
+          type: string
+          example: manual
+
+    PriceUpdate:
+      type: object
+      required:
+        - isin
+        - current_price
+      properties:
+        isin:
+          type: string
+          example: INE467B01029
+        current_price:
+          type: number
+          minimum: 0
+          example: 715.50
+        as_of:
+          type: string
+          format: date-time
+          example: 2025-10-14T00:00:00.000Z
+
+    Issuer:
+      type: object
+      properties:
+        _id:
+          type: string
+          format: objectid
+        isin:
+          type: string
+          example: INE467B01029
+        company:
+          type: string
+          example: Tata Motors Ltd
+        sector:
+          type: string
+          example: Auto
+        rating:
+          type: string
+          example: BBB+
+        market_cap:
+          type: string
+          example: ₹3.5L cr
+        week52_high:
+          type: number
+          example: 1150
+        week52_low:
+          type: number
+          example: 550
+        description:
+          type: string
+          example: India's leading automotive OEM with PV & CV portfolio.
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    Pagination:
+      type: object
+      properties:
+        page:
+          type: integer
+          example: 1
+        limit:
+          type: integer
+          example: 100
+        total:
+          type: integer
+          example: 250
+        totalPages:
+          type: integer
+          example: 3
+
+    Error:
+      type: object
+      properties:
+        error:
+          type: string
+          example: Error message
+
+tags:
+  - name: Portfolio
+    description: Portfolio management endpoints
+  - name: Admin
+    description: Administrative endpoints
+

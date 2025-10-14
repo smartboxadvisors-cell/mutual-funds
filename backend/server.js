@@ -90,6 +90,7 @@ app.use('/api/auth', authRouter);
 app.use('/api/instruments', require('./routes/instruments'));
 app.use('/api/upload', require('./routes/upload'));
 app.use('/api/trading', require('./routes/trading'));
+app.use('/api/portfolio', require('./routes/portfolio.routes'));
 app.use('/api', listRouter);
 
 // ---------- Health ----------

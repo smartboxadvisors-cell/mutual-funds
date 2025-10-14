@@ -363,8 +363,20 @@ const mapTransactionToRow = (transaction) => {
 
   const raw = transaction.raw || {};
   const exchange = transaction.exchange || raw.exchange || raw.Exchange || '';
-  const tradeDateValue = transaction.tradeDate || raw.tradeDate || raw['Trade Date'] || '';
-  const maturityValue = transaction.maturityDate || raw.maturityDate || raw.Maturity || '';
+  const tradeDateValue =
+    transaction.tradeDate ||
+    raw.tradeDate ||
+    raw['Trade Date'] ||
+    raw['Deal Date'] ||
+    raw.Date ||
+    '';
+  const maturityValue =
+    transaction.maturityDate ||
+    raw.maturityDate ||
+    raw.MaturityDate ||
+    raw['Maturity Date'] ||
+    raw.Maturity ||
+    '';
 
   let amountValue =
     typeof transaction.tradeAmountValue === 'number' && !Number.isNaN(transaction.tradeAmountValue)
@@ -410,6 +422,7 @@ const mapTransactionToRow = (transaction) => {
       }
       if (raw.Yield) return String(raw.Yield);
       if (raw['Deal Yield']) return String(raw['Deal Yield']);
+      if (raw['Traded Yield (%)']) return String(raw['Traded Yield (%)']);
       return '';
     })()
   );
@@ -427,6 +440,7 @@ const mapTransactionToRow = (transaction) => {
     "Amount (Rs lacs)": Number(amountValue || 0),
     "Price (Rs)": Number(priceValue || 0),
     Yield: yieldValue,
+    "Deal Yield": yieldValue,
     Status: sanitizeDisplayValue(transaction.settlementStatus || raw.settlementStatus || raw.Status),
     "Deal Type": transaction.orderType || raw.orderType || raw['Deal Type'] || '',
     Rating: ratingValue,
@@ -717,7 +731,7 @@ export default function TradePreviewBuilder() {
           }
         } else if (effectiveExchange === "NSE") {
           const isinIdx = firstCol(headers, ["isin"]);
-          const dateIdx = firstCol(headers, ["date", "trade date"]);
+          const dateIdx = firstCol(headers, ["deal date", "date", "trade date"]);
           const timeIdx = firstCol(headers, ["trade time", "time", "timestamp"]);
           const maturityIdx = firstCol(headers, ["maturity date", "maturity"]);
           const dealSizeIdx = firstCol(headers, ["deal size", "trade amount (rs)", "amount"]);
@@ -746,9 +760,11 @@ export default function TradePreviewBuilder() {
               dealType = seller || buyer || "";
             }
 
+            const tradeDate = toDate(row[dateIdx]);
+
             tradeRows.push({
               Exchange: exchangeLabel,
-              "Trade Date": toDate(row[dateIdx]),
+              "Trade Date": tradeDate,
               "Trade Time": toTime(row[timeIdx]),
               ISIN: isin,
               "Issuer details": "",
@@ -756,6 +772,7 @@ export default function TradePreviewBuilder() {
               "Amount (Rs lacs)": amountLacs,
               "Price (Rs)": parseFloat(row[priceIdx]) || 0,
               Yield: sanitizeDisplayValue(row[yieldIdx]),
+              "Deal Yield": sanitizeDisplayValue(row[yieldIdx]),
               Status: sanitizeDisplayValue(row[statusIdx]),
               "Deal Type": dealType,
               Rating: "",
@@ -779,9 +796,11 @@ export default function TradePreviewBuilder() {
             const amountLacs = pickNumeric(row[amountIdx], row['Trade Amount (In Rs lacs)']) ?? 0;
             const orderType = String(row[orderTypeIdx] || "").toUpperCase();
 
+            const tradeDate = toDate(row[dateIdx]);
+
             tradeRows.push({
               Exchange: exchangeLabel,
-              "Trade Date": toDate(row[dateIdx]),
+              "Trade Date": tradeDate,
               "Trade Time": toTime(row[timeIdx]),
               ISIN: isin,
               "Issuer details": "",
@@ -789,6 +808,7 @@ export default function TradePreviewBuilder() {
               "Amount (Rs lacs)": amountLacs,
               "Price (Rs)": parseFloat(row[priceIdx]) || 0,
               Yield: sanitizeDisplayValue(row[yieldIdx]),
+              "Deal Yield": sanitizeDisplayValue(row[yieldIdx]),
               Status: "",
               "Deal Type": orderType,
               Rating: "",
