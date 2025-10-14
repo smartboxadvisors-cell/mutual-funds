@@ -856,87 +856,6 @@ export default function TradePreviewBuilder() {
     }
   };
 
-  const fetchFromDatabase = useCallback(async (options = {}) => {
-    const { allowEmptyFilters = false, initial = false } = options;
-
-    const ratingInput = (filters.rating || '').trim();
-    const tradeDateInput = (filters.tradeDate || '').trim();
-    const exchangeInput = (filters.exchange || '').trim();
-    const startDateInput = (filters.startDate || '').trim();
-    const endDateInput = (filters.endDate || '').trim();
-
-    const ratingGroupParam = ratingInput ? normalizeRatingGroup(ratingInput) : '';
-    const exchangeParam = exchangeInput ? exchangeInput.toUpperCase() : '';
-
-    if (!allowEmptyFilters && !ratingGroupParam && !tradeDateInput && !startDateInput && !endDateInput) {
-      setUsingDatabase(false);
-      setDbMeta({
-        success: false,
-        message: 'Set a rating (e.g. AAA), trade date, or date range filter before fetching from MongoDB.',
-      });
-      return;
-    }
-
-    const params = new URLSearchParams();
-    params.set('page', '1');
-    params.set('limit', String(DB_FETCH_LIMIT));
-    if (ratingGroupParam) params.set('ratingGroup', ratingGroupParam);
-    if (tradeDateInput) params.set('date', tradeDateInput);
-    if (startDateInput) params.set('startDate', startDateInput);
-    if (endDateInput) params.set('endDate', endDateInput);
-    if (exchangeParam) params.set('exchange', exchangeParam);
-
-    setBusy(true);
-
-    try {
-      const token = localStorage.getItem('token');
-      const response = await fetch(`${API_BASE}/trading/transactions?${params.toString()}`, {
-        headers: {
-          ...(token ? { Authorization: `Bearer ${token}` } : {}),
-        },
-      });
-
-      if (!response.ok) {
-        const text = await response.text();
-        throw new Error(text || `Server error: ${response.status}`);
-      }
-
-      const payload = await response.json();
-      const mappedRows = (payload.data || []).map(mapTransactionToRow).filter(Boolean);
-      sortRowsDescending(mappedRows);
-
-      setRows(mappedRows);
-      setCurrentPage(1);
-      setUsingDatabase(true);
-      setDbMeta({
-        success: true,
-        fetched: mappedRows.length,
-        total: payload.total || mappedRows.length,
-        summary: payload.summary || null,
-        filtersApplied: payload.filtersApplied || {},
-        availableRatings: payload.availableRatings || [],
-      });
-      setLastDbQuery({
-        ratingGroup: ratingGroupParam,
-        tradeDate: tradeDateInput,
-        startDate: startDateInput,
-        endDate: endDateInput,
-        exchange: exchangeParam,
-        initial,
-      });
-    } catch (error) {
-      console.error('Trading DB fetch error:', error);
-      setRows([]);
-      setUsingDatabase(true);
-      setDbMeta({
-        success: false,
-        message: error.message || 'Failed to fetch trading data from MongoDB.',
-      });
-    } finally {
-      setBusy(false);
-    }
-  }, [filters.exchange, filters.rating, filters.tradeDate, filters.startDate, filters.endDate]);
-
   const activeRatingGroup = useMemo(() => {
     const input = (filters.rating || '').trim();
     if (!input) return '';
@@ -963,16 +882,179 @@ export default function TradePreviewBuilder() {
     [filters.endDate]
   );
 
+  const serverFilterSnapshot = useMemo(() => {
+    const trimmedTradeTime = (filters.tradeTime || '').trim();
+    const trimmedIsin = (filters.isin || '').trim().toUpperCase();
+    const trimmedIssuer = (filters.issuerDetails || '').trim();
+    const trimmedMaturity = (filters.maturity || '').trim();
+    const trimmedMinAmt = (filters.minAmt || '').trim();
+    const trimmedMaxAmt = (filters.maxAmt || '').trim();
+    const trimmedMinPrice = (filters.minPrice || '').trim();
+    const trimmedMaxPrice = (filters.maxPrice || '').trim();
+    const trimmedYield = (filters.yield || '').trim();
+    const trimmedStatus = (filters.status || '').trim();
+    const trimmedDealType = (filters.dealType || '').trim();
+
+    return {
+      ratingGroup: activeRatingGroup,
+      tradeDate: normalizedTradeDateFilter,
+      startDate: normalizedStartDateFilter,
+      endDate: normalizedEndDateFilter,
+      exchange: normalizedExchangeFilter,
+      tradeTime: trimmedTradeTime,
+      isin: trimmedIsin,
+      issuer: trimmedIssuer,
+      maturity: trimmedMaturity,
+      minAmt: trimmedMinAmt,
+      maxAmt: trimmedMaxAmt,
+      minPrice: trimmedMinPrice,
+      maxPrice: trimmedMaxPrice,
+      yieldText: trimmedYield,
+      status: trimmedStatus,
+      dealType: trimmedDealType,
+    };
+  }, [
+    activeRatingGroup,
+    normalizedTradeDateFilter,
+    normalizedStartDateFilter,
+    normalizedEndDateFilter,
+    normalizedExchangeFilter,
+    filters.tradeTime,
+    filters.isin,
+    filters.issuerDetails,
+    filters.maturity,
+    filters.minAmt,
+    filters.maxAmt,
+    filters.minPrice,
+    filters.maxPrice,
+    filters.yield,
+    filters.status,
+    filters.dealType,
+  ]);
+
+  const fetchFromDatabase = useCallback(
+    async (options = {}) => {
+      const { allowEmptyFilters = false } = options;
+      const {
+        ratingGroup: ratingGroupParam,
+        tradeDate: tradeDateInput,
+        startDate: startDateInput,
+        endDate: endDateInput,
+        exchange: exchangeParam,
+        tradeTime: tradeTimeInput,
+        isin: isinInput,
+        issuer: issuerInput,
+        maturity: maturityInput,
+        minAmt: minAmtInput,
+        maxAmt: maxAmtInput,
+        minPrice: minPriceInput,
+        maxPrice: maxPriceInput,
+        yieldText: yieldInput,
+        status: statusInput,
+        dealType: dealTypeInput,
+      } = serverFilterSnapshot;
+
+      const hasAnyFilter = [
+        ratingGroupParam,
+        tradeDateInput,
+        startDateInput,
+        endDateInput,
+        exchangeParam,
+        tradeTimeInput,
+        isinInput,
+        issuerInput,
+        maturityInput,
+        minAmtInput,
+        maxAmtInput,
+        minPriceInput,
+        maxPriceInput,
+        yieldInput,
+        statusInput,
+        dealTypeInput,
+      ].some((value) => value !== '' && value !== null && value !== undefined);
+
+      if (!allowEmptyFilters && !hasAnyFilter) {
+        setUsingDatabase(false);
+        setDbMeta({
+          success: false,
+          message: 'Set at least one filter before fetching from MongoDB.',
+        });
+        return;
+      }
+
+      const params = new URLSearchParams();
+      params.set('page', '1');
+      params.set('limit', String(DB_FETCH_LIMIT));
+      if (ratingGroupParam) params.set('ratingGroup', ratingGroupParam);
+      if (tradeDateInput) params.set('date', tradeDateInput);
+      if (startDateInput) params.set('startDate', startDateInput);
+      if (endDateInput) params.set('endDate', endDateInput);
+      if (exchangeParam) params.set('exchange', exchangeParam);
+      if (tradeTimeInput) params.set('tradeTime', tradeTimeInput);
+      if (isinInput) params.set('isin', isinInput);
+      if (issuerInput) params.set('issuer', issuerInput);
+      if (maturityInput) params.set('maturity', maturityInput);
+      if (minAmtInput) params.set('minAmt', minAmtInput);
+      if (maxAmtInput) params.set('maxAmt', maxAmtInput);
+      if (minPriceInput) params.set('minPrice', minPriceInput);
+      if (maxPriceInput) params.set('maxPrice', maxPriceInput);
+      if (yieldInput) params.set('yield', yieldInput);
+      if (statusInput) params.set('status', statusInput);
+      if (dealTypeInput) params.set('dealType', dealTypeInput);
+
+      setBusy(true);
+
+      try {
+        const token = localStorage.getItem('token');
+        const response = await fetch(`${API_BASE}/trading/transactions?${params.toString()}`, {
+          headers: {
+            ...(token ? { Authorization: `Bearer ${token}` } : {}),
+          },
+        });
+
+        if (!response.ok) {
+          const text = await response.text();
+          throw new Error(text || `Server error: ${response.status}`);
+        }
+
+        const payload = await response.json();
+        const mappedRows = (payload.data || []).map(mapTransactionToRow).filter(Boolean);
+        sortRowsDescending(mappedRows);
+
+        setRows(mappedRows);
+        setCurrentPage(1);
+        setUsingDatabase(true);
+        setDbMeta({
+          success: true,
+          fetched: mappedRows.length,
+          total: payload.total || mappedRows.length,
+          summary: payload.summary || null,
+          filtersApplied: payload.filtersApplied || {},
+          availableRatings: payload.availableRatings || [],
+        });
+        setLastDbQuery({ ...serverFilterSnapshot });
+      } catch (error) {
+        console.error('Trading DB fetch error:', error);
+        setRows([]);
+        setUsingDatabase(true);
+        setDbMeta({
+          success: false,
+          message: error.message || 'Failed to fetch trading data from MongoDB.',
+        });
+      } finally {
+        setBusy(false);
+      }
+    },
+    [serverFilterSnapshot]
+  );
   const dbFiltersChanged = useMemo(() => {
     if (!usingDatabase || !lastDbQuery) return false;
-    return (
-      (lastDbQuery.ratingGroup || '') !== (activeRatingGroup || '') ||
-      (lastDbQuery.tradeDate || '') !== (normalizedTradeDateFilter || '') ||
-      (lastDbQuery.startDate || '') !== (normalizedStartDateFilter || '') ||
-      (lastDbQuery.endDate || '') !== (normalizedEndDateFilter || '') ||
-      (lastDbQuery.exchange || '') !== (normalizedExchangeFilter || '')
-    );
-  }, [usingDatabase, lastDbQuery, activeRatingGroup, normalizedTradeDateFilter, normalizedStartDateFilter, normalizedEndDateFilter, normalizedExchangeFilter]);
+    return Object.keys(serverFilterSnapshot).some((key) => {
+      const previous = lastDbQuery[key] ?? '';
+      const current = serverFilterSnapshot[key] ?? '';
+      return previous !== current;
+    });
+  }, [usingDatabase, lastDbQuery, serverFilterSnapshot]);
 
   React.useEffect(() => {
     if (!usingDatabase) return;

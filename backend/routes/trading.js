@@ -68,6 +68,11 @@ function computeRatingGroup(input) {
   return 'UNRATED';
 }
 
+const escapeRegex = (value) =>
+  String(value || '').replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+const makeRegex = (value) => new RegExp(escapeRegex(value), 'i');
+
 function parseNumericValue(value) {
   if (value === null || value === undefined) return null;
   if (typeof value === 'number') {
@@ -1264,6 +1269,17 @@ router.get('/transactions', async (req, res) => {
       startDate,
       endDate,
       exchange,
+      tradeTime: tradeTimeFilter,
+      isin,
+      issuer,
+      maturity,
+      dealType,
+      status,
+      yield: yieldFilter,
+      minAmt,
+      maxAmt,
+      minPrice,
+      maxPrice,
       limit = '100',
       page = '1',
       sort = 'tradeDate',
@@ -1326,6 +1342,113 @@ router.get('/transactions', async (req, res) => {
       applied.exchange = normalizedExchange;
     }
 
+    if (tradeTimeFilter) {
+      const trimmed = tradeTimeFilter.toString().trim();
+      if (trimmed) {
+        filters.tradeTime = { $regex: makeRegex(trimmed) };
+        applied.tradeTime = trimmed;
+      }
+    }
+
+    if (isin) {
+      const trimmed = isin.toString().trim().toUpperCase();
+      if (trimmed) {
+        filters.isin = { $regex: makeRegex(trimmed) };
+        applied.isin = trimmed;
+      }
+    }
+
+    if (issuer) {
+      const trimmed = issuer.toString().trim();
+      if (trimmed) {
+        filters.issuerName = { $regex: makeRegex(trimmed) };
+        applied.issuer = trimmed;
+      }
+    }
+
+    if (dealType) {
+      const trimmed = dealType.toString().trim();
+      if (trimmed) {
+        filters.orderType = { $regex: makeRegex(trimmed) };
+        applied.dealType = trimmed;
+      }
+    }
+
+    if (status) {
+      const trimmed = status.toString().trim();
+      if (trimmed) {
+        filters.settlementStatus = { $regex: makeRegex(trimmed) };
+        applied.status = trimmed;
+      }
+    }
+
+    if (maturity) {
+      const parsedMaturity = parseDateValue(maturity);
+      if (parsedMaturity) {
+        const startMaturity = new Date(parsedMaturity);
+        startMaturity.setHours(0, 0, 0, 0);
+        const endMaturity = new Date(parsedMaturity);
+        endMaturity.setHours(23, 59, 59, 999);
+        filters.maturityDate = { $gte: startMaturity, $lte: endMaturity };
+        applied.maturity = {
+          start: startMaturity.toISOString(),
+          end: endMaturity.toISOString(),
+        };
+      }
+    }
+
+    if (yieldFilter) {
+      const trimmed = yieldFilter.toString().trim();
+      const numericYield = parseNumericValue(trimmed);
+      if (numericYield !== null) {
+        const tolerance = 0.0000001;
+        filters.yieldValue = {
+          $gte: numericYield - tolerance,
+          $lte: numericYield + tolerance,
+        };
+        applied.yield = numericYield;
+      } else {
+        filters.yieldRaw = { $regex: makeRegex(trimmed) };
+        applied.yield = trimmed;
+      }
+    }
+
+    const amountRange = {};
+    const minAmountNumber = parseNumericValue(minAmt);
+    const maxAmountNumber = parseNumericValue(maxAmt);
+    if (minAmountNumber !== null) {
+      amountRange.$gte = minAmountNumber;
+      applied.minAmt = minAmountNumber;
+    }
+    if (maxAmountNumber !== null) {
+      amountRange.$lte = maxAmountNumber;
+      applied.maxAmt = maxAmountNumber;
+    }
+    if (Object.keys(amountRange).length > 0) {
+      filters.tradeAmountValue = {
+        ...(filters.tradeAmountValue || {}),
+        ...amountRange,
+      };
+    }
+
+    const priceRange = {};
+    const minPriceNumber = parseNumericValue(minPrice);
+    const maxPriceNumber = parseNumericValue(maxPrice);
+    if (minPriceNumber !== null) {
+      priceRange.$gte = minPriceNumber;
+      applied.minPrice = minPriceNumber;
+    }
+    if (maxPriceNumber !== null) {
+      priceRange.$lte = maxPriceNumber;
+      applied.maxPrice = maxPriceNumber;
+    }
+    if (Object.keys(priceRange).length > 0) {
+      filters.tradePriceValue = {
+        ...(filters.tradePriceValue || {}),
+        ...priceRange,
+      };
+    }
+
     const parsedLimit = Math.min(Math.max(parseInt(limit, 10) || 50, 1), 500);
     const parsedPage = Math.max(parseInt(page, 10) || 1, 1);
     const skip = (parsedPage - 1) * parsedLimit;
@@ -1381,7 +1504,7 @@ router.get('/transactions', async (req, res) => {
       };
     });
 
-    if (!filters.ratingGroup && !filters.tradeDate) {
+    if (Object.keys(filters).length === 0) {
       applied.mode = 'LATEST';
     }
 
