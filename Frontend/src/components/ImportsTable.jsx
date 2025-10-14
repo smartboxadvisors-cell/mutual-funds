@@ -110,6 +110,8 @@ export default function ImportsTable() {
     tableFiltersDebounced // Reset page when table filters change
   ]);
 
+  const ratingFilterValue = (tableFiltersDebounced.rating || '').trim();
+
   const params = useMemo(() => ({
     page,
     limit,
@@ -117,6 +119,7 @@ export default function ImportsTable() {
     instrument: tableFiltersDebounced.instrument || instrument, // Use table filter if present
     isin: tableFiltersDebounced.isin || isin,                   // Use table filter if present
     rating: tableFiltersDebounced.rating,                        // Use table filter
+    ratingContains: tableFiltersDebounced.rating,                // Enable substring search
     ratings: ratingsDebounced,                                   // Pass ratings array
     from,
     to,
@@ -149,13 +152,68 @@ export default function ImportsTable() {
       setLoading(true);
       setError('');
       try {
-        const { items, total, totalPages } = await fetchImports(params);
+        const result = await fetchImports(params);
+        if (cancelled || !result) return;
+
+        const {
+          items: initialItems = [],
+          total: initialTotal = 0,
+          totalPages: initialTotalPages = 1,
+        } = result;
+
+        const limitNumber = Number(params.limit ?? limit) || limit;
+        const searchTerm = ratingFilterValue.toLowerCase();
+        const matchesRating = (entry) =>
+          !searchTerm || String(entry.rating || '').toLowerCase().includes(searchTerm);
+
+        let workingItems = initialItems;
+        let workingTotal = initialTotal;
+        let workingTotalPages = initialTotalPages;
+
+        if (searchTerm) {
+          const filtered = workingItems.filter(matchesRating);
+
+          if (filtered.length === 0) {
+            const fallbackParams = {
+              ...params,
+              page: 1,
+              rating: '',
+              ratingContains: '',
+              limit: Math.max(limitNumber, 500),
+            };
+
+            const fallbackResult = await fetchImports(fallbackParams);
+            if (!cancelled && fallbackResult) {
+              const fallbackFiltered = (fallbackResult.items || []).filter(matchesRating);
+              workingItems = fallbackFiltered;
+              workingTotal = fallbackFiltered.length;
+              workingTotalPages = Math.max(
+                1,
+                Math.ceil((fallbackFiltered.length || 0) / limitNumber)
+              );
+            } else {
+              workingItems = filtered;
+              workingTotal = filtered.length;
+              workingTotalPages = Math.max(1, Math.ceil(filtered.length / limitNumber));
+            }
+          } else {
+            const serverAppliedFilter =
+              filtered.length === workingItems.length &&
+              filtered.every(matchesRating);
+
+            if (!serverAppliedFilter) {
+              workingItems = filtered;
+              workingTotal = filtered.length;
+              workingTotalPages = Math.max(1, Math.ceil(filtered.length / limitNumber));
+            }
+          }
+        }
+
+        const reclassifiedItems = workingItems.map(reclassifyInstrument);
         if (!cancelled) {
-          // Apply REIT/InvIT reclassification
-          const reclassifiedItems = items.map(reclassifyInstrument);
           setRows(reclassifiedItems);
-          setTotal(total);
-          setTotalPages(totalPages);
+          setTotal(workingTotal);
+          setTotalPages(workingTotalPages);
         }
       } catch (e) {
         if (!cancelled) setError(e.message || String(e));
@@ -163,8 +221,10 @@ export default function ImportsTable() {
         if (!cancelled) setLoading(false);
       }
     })();
-    return () => { cancelled = true; };
-  }, [params]);
+    return () => {
+      cancelled = true;
+    };
+  }, [params, ratingFilterValue, limit]);
 
   const onReset = () => {
     setSchemeInput('');

@@ -63,6 +63,7 @@ export async function fetchImports(
     instrument = '',
     isin = '',
     rating = '',
+    ratingContains = '',
     ratings = [], // NEW: array of ratings for multi-select
 
     from = '',
@@ -98,6 +99,10 @@ export async function fetchImports(
   setIfPresent(params, 'isin', isin);
   
   // Handle multiple ratings (NEW)
+  const ratingContainsTrimmed =
+    typeof ratingContains === 'string' ? ratingContains.trim() : '';
+  const ratingTrimmed = typeof rating === 'string' ? rating.trim() : '';
+
   if (Array.isArray(ratings) && ratings.length > 0) {
     // Send multiple ratings as separate query parameters
     ratings.forEach(r => {
@@ -105,9 +110,11 @@ export async function fetchImports(
         params.append('ratings', r.trim());
       }
     });
-  } else if (rating) {
+  } else if (ratingContainsTrimmed) {
+    params.set('ratingContains', ratingContainsTrimmed);
+  } else if (ratingTrimmed) {
     // Fallback to single rating for backward compatibility
-    setIfPresent(params, 'rating', rating);
+    params.set('rating', ratingTrimmed);
   }
 
   setIfPresent(params, 'from', from);

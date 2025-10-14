@@ -40,6 +40,7 @@ router.get('/imports', async (req, res) => {
       instrument   = '',
       isin         = '',
       rating       = '',
+      ratingContains = '',
       ratings      = [],  // NEW: array of ratings for multi-select
       from         = '',  // report date from (yyyy-mm-dd)
       to           = '',  // report date to   (yyyy-mm-dd)
@@ -95,20 +96,36 @@ router.get('/imports', async (req, res) => {
     addRegex('isin', isin);
     
     // Handle multiple ratings (NEW)
-    const ratingsArray = Array.isArray(ratings) ? ratings : 
-                        (typeof ratings === 'string' && ratings ? [ratings] : []);
-    
+    const ratingsArray = Array.isArray(ratings)
+      ? ratings
+      : (typeof ratings === 'string' && ratings ? [ratings] : []);
+
+    const trimmedRatingContains =
+      typeof ratingContains === 'string' ? ratingContains.trim() : '';
+    const trimmedRating =
+      typeof rating === 'string' ? rating.trim() : '';
+
     if (ratingsArray.length > 0) {
-      // Use $in for multiple ratings with regex patterns
-      filter.rating = {
-        $in: ratingsArray.map(r => new RegExp(`^${escapeRegex(r)}`, 'i'))
-      };
-    } else if (rating) {
-      // Fallback to single rating for backward compatibility
-      filter.rating = {
-        $regex: `^${escapeRegex(rating)}`,
-        $options: 'i',
-      };
+      // Allow substring matches so "A1" also returns "CRISIL A1+"
+      const ratingRegexes = ratingsArray
+        .map((r) => (r && r.trim() ? new RegExp(escapeRegex(r.trim()), 'i') : null))
+        .filter(Boolean);
+
+      if (trimmedRatingContains) {
+        ratingRegexes.push(new RegExp(escapeRegex(trimmedRatingContains), 'i'));
+      }
+
+      if (ratingRegexes.length > 0) {
+        filter.rating = { $in: ratingRegexes };
+      }
+    } else {
+      const searchTerm = trimmedRatingContains || trimmedRating;
+      if (searchTerm) {
+        filter.rating = {
+          $regex: escapeRegex(searchTerm),
+          $options: 'i',
+        };
+      }
     }
     
     // numeric ranges
