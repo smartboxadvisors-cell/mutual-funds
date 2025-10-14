@@ -254,11 +254,6 @@
 }
 
 
-.tp-virtual-pad td {
-  padding: 0;
-  border: none;
-}
-
 .tp-load-controls__row {
   display: flex;
   flex-direction: column;
@@ -284,16 +279,23 @@
   font-weight: 600;
 }
 
+.tp-load-controls__pager {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  justify-content: flex-start;
+  flex-wrap: wrap;
+}
+
+.tp-load-controls__page-indicator {
+  font-size: 0.9rem;
+  color: #1f2937;
+}
+
 .tp-load-controls__done {
   font-size: 0.85rem;
   color: #2563eb;
   font-weight: 500;
-}
-
-.tp-loading-row {
-  background: rgba(37, 99, 235, 0.05);
-  color: #64748b;
-  font-style: italic;
 }
 
 .tp-rating-controls {
@@ -440,6 +442,18 @@
   gap: 8px;
 }
 
+.tp-summary-table {
+  table-layout: fixed;
+  width: 100%;
+}
+
+.tp-summary-table th,
+.tp-summary-table td {
+  word-break: break-word;
+  white-space: normal;
+  vertical-align: top;
+}
+
 .tp-summary-table thead {
   background: #0f172a;
   color: rgba(255, 255, 255, 0.92);
@@ -484,6 +498,10 @@
     align-items: center;
   }
 
+  .tp-load-controls__pager {
+    justify-content: flex-end;
+  }
+
   .tp-rating-controls__row {
     flex-direction: row;
     align-items: center;
@@ -501,6 +519,10 @@
   }
 
   .tp-rating-controls__pager {
+    justify-content: center;
+  }
+
+  .tp-load-controls__pager {
     justify-content: center;
   }
 

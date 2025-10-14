@@ -48,25 +48,20 @@ const BUCKET_HEADER_COLORS = {
   default: '#1f2937',
 };
 
-const VIRTUAL_ROW_HEIGHT = 56;
-const VIRTUAL_BUFFER_ROWS = 12;
-const SUMMARY_ROW_HEIGHT = 52;
-const SUMMARY_BUFFER_ROWS = 8;
-
 const SummaryTable = React.memo(function SummaryTable({ rows }) {
   return (
     <div className="tp-summary-container">
       <div className="tp-scroll max-h-[320px] overflow-y-auto">
-        <table className="tp-summary-table min-w-[720px] w-full table-auto border-collapse border border-slate-200 text-sm text-slate-700">
+        <table className="tp-summary-table min-w-[720px] w-full table-fixed border-collapse border border-slate-200 text-sm text-slate-700">
           <thead className="bg-slate-800 text-[13px] uppercase tracking-[0.17em] text-white/90 border-b border-slate-700">
             <tr>
-              <th className="px-3 py-3 text-left font-semibold text-white/90 tracking-wide align-middle w-36 border-r border-slate-700 last:border-r-0">Name of Issuer</th>
-              <th className="px-3 py-3 text-left font-semibold text-white/90 tracking-wide align-middle w-28 border-r border-slate-700 last:border-r-0">ISIN</th>
-              <th className="px-3 py-3 text-left font-semibold text-white/90 tracking-wide align-middle w-28 border-r border-slate-700 last:border-r-0">Maturity Date</th>
-              <th className="px-3 py-3 text-right font-semibold text-white/90 tracking-wide align-middle w-20 border-r border-slate-700 last:border-r-0">Trade Count</th>
-              <th className="px-3 py-3 text-right font-semibold text-white/90 tracking-wide align-middle w-28 border-r border-slate-700 last:border-r-0">Sum of Amount (INR Lacs)</th>
-              <th className="px-3 py-3 text-right font-semibold text-white/90 tracking-wide align-middle w-28 border-r border-slate-700 last:border-r-0">Weighted Avg Yield</th>
-              <th className="px-3 py-3 text-left font-semibold text-white/90 tracking-wide align-middle w-36 border-r border-slate-700 last:border-r-0">Broker + YTM</th>
+              <th className="px-3 py-3 text-left font-semibold text-white/90 tracking-wide align-middle border-r border-slate-700 last:border-r-0">Name of Issuer</th>
+              <th className="px-3 py-3 text-left font-semibold text-white/90 tracking-wide align-middle border-r border-slate-700 last:border-r-0">ISIN</th>
+              <th className="px-3 py-3 text-left font-semibold text-white/90 tracking-wide align-middle border-r border-slate-700 last:border-r-0">Maturity Date</th>
+              <th className="px-3 py-3 text-right font-semibold text-white/90 tracking-wide align-middle border-r border-slate-700 last:border-r-0">Trade Count</th>
+              <th className="px-3 py-3 text-right font-semibold text-white/90 tracking-wide align-middle border-r border-slate-700 last:border-r-0">Sum of Amount (INR Lacs)</th>
+              <th className="px-3 py-3 text-right font-semibold text-white/90 tracking-wide align-middle border-r border-slate-700 last:border-r-0">Weighted Avg Yield</th>
+              <th className="px-3 py-3 text-left font-semibold text-white/90 tracking-wide align-middle border-r border-slate-700 last:border-r-0">Broker + YTM</th>
             </tr>
           </thead>
           <tbody className="bg-white divide-y divide-slate-200 text-slate-700">
@@ -77,13 +72,13 @@ const SummaryTable = React.memo(function SummaryTable({ rows }) {
             ) : (
               rows.map((summary) => (
                 <tr key={summary.rowKey} className="odd:bg-white even:bg-slate-100 transition-colors duration-200 hover:bg-orange-50/40">
-                  <td className="px-3 py-4 font-semibold text-slate-800 whitespace-normal break-words align-top border-r border-slate-200 last:border-r-0 w-36">{summary.issuer}</td>
-                  <td className="px-3 py-4 font-mono uppercase text-slate-500 whitespace-normal break-words align-top border-r border-slate-200 last:border-r-0 w-28">{summary.isin}</td>
-                  <td className="px-3 py-4 text-slate-600 whitespace-normal break-words align-top border-r border-slate-200 last:border-r-0 w-28">{summary.maturity}</td>
-                  <td className="px-3 py-4 text-right font-semibold text-slate-900 whitespace-normal break-words align-top border-r border-slate-200 last:border-r-0 w-20">{summary.tradeCount}</td>
-                  <td className="px-3 py-4 text-right font-semibold text-indigo-600 whitespace-normal break-words align-top border-r border-slate-200 last:border-r-0 w-28">{summary.sumAmount.toFixed(2)}</td>
-                  <td className="px-3 py-4 text-right font-semibold text-emerald-600 whitespace-normal break-words align-top border-r border-slate-200 last:border-r-0 w-28">{Number.isFinite(summary.weightedAverage) ? summary.weightedAverage.toFixed(2) : '-'}</td>
-                  <td className="px-3 py-4 text-slate-600 whitespace-normal break-words align-top border-r border-slate-200 last:border-r-0 w-36">{summary.brokerYtm}</td>
+                  <td className="px-3 py-4 font-semibold text-slate-800 whitespace-normal break-words align-top border-r border-slate-200 last:border-r-0">{summary.issuer}</td>
+                  <td className="px-3 py-4 font-mono uppercase text-slate-500 whitespace-normal break-words align-top border-r border-slate-200 last:border-r-0">{summary.isin}</td>
+                  <td className="px-3 py-4 text-slate-600 whitespace-normal break-words align-top border-r border-slate-200 last:border-r-0">{summary.maturity}</td>
+                  <td className="px-3 py-4 text-right font-semibold text-slate-900 whitespace-normal break-words align-top border-r border-slate-200 last:border-r-0">{summary.tradeCount}</td>
+                  <td className="px-3 py-4 text-right font-semibold text-indigo-600 whitespace-normal break-words align-top border-r border-slate-200 last:border-r-0">{summary.sumAmount.toFixed(2)}</td>
+                  <td className="px-3 py-4 text-right font-semibold text-emerald-600 whitespace-normal break-words align-top border-r border-slate-200 last:border-r-0">{Number.isFinite(summary.weightedAverage) ? summary.weightedAverage.toFixed(2) : '-'}</td>
+                  <td className="px-3 py-4 text-slate-600 whitespace-normal break-words align-top border-r border-slate-200 last:border-r-0">{summary.brokerYtm}</td>
                 </tr>
               ))
             )}
@@ -311,6 +306,29 @@ const pickNumeric = (...sources) => {
   return null;
 };
 
+const INVALID_DISPLAY_TOKENS = new Set([
+  'NA',
+  'N/A',
+  'NOT AVAILABLE',
+  'NOT APPLICABLE',
+  'NULL',
+  'NIL',
+  'NONE',
+  '--',
+]);
+
+const sanitizeDisplayValue = (value) => {
+  if (value === null || value === undefined) return '';
+  const trimmed = String(value).trim();
+  if (!trimmed) return '';
+  const normalized = trimmed.replace(/\s+/g, ' ').replace(/\./g, '').toUpperCase();
+  const collapsed = normalized.replace(/[^A-Z]/g, '');
+  if (INVALID_DISPLAY_TOKENS.has(normalized) || INVALID_DISPLAY_TOKENS.has(collapsed)) {
+    return '';
+  }
+  return trimmed;
+};
+
 const getFileBadgeLabel = (filename = '') => {
   const lower = String(filename || '').toLowerCase();
   if (lower.endsWith('.csv')) return 'CSV';
@@ -382,16 +400,19 @@ const mapTransactionToRow = (transaction) => {
     ? ratingValue.split(/[|;]+/).map((part) => part.trim()).filter(Boolean)
     : [];
 
-  const yieldValue = (() => {
-    if (transaction.yieldRaw && String(transaction.yieldRaw).trim()) {
-      return String(transaction.yieldRaw).trim();
-    }
-    if (typeof transaction.yieldValue === 'number' && !Number.isNaN(transaction.yieldValue)) {
-      return transaction.yieldValue.toString();
-    }
-    if (raw.Yield) return String(raw.Yield);
-    return '';
-  })();
+  const yieldValue = sanitizeDisplayValue(
+    (() => {
+      if (transaction.yieldRaw && String(transaction.yieldRaw).trim()) {
+        return String(transaction.yieldRaw).trim();
+      }
+      if (typeof transaction.yieldValue === 'number' && !Number.isNaN(transaction.yieldValue)) {
+        return transaction.yieldValue.toString();
+      }
+      if (raw.Yield) return String(raw.Yield);
+      if (raw['Deal Yield']) return String(raw['Deal Yield']);
+      return '';
+    })()
+  );
 
   const issuerDetail =
     transaction.issuerName || raw.issuerName || raw['Issuer details'] || raw.issuer || '';
@@ -406,7 +427,7 @@ const mapTransactionToRow = (transaction) => {
     "Amount (Rs lacs)": Number(amountValue || 0),
     "Price (Rs)": Number(priceValue || 0),
     Yield: yieldValue,
-    Status: transaction.settlementStatus || raw.settlementStatus || raw.Status || '',
+    Status: sanitizeDisplayValue(transaction.settlementStatus || raw.settlementStatus || raw.Status),
     "Deal Type": transaction.orderType || raw.orderType || raw['Deal Type'] || '',
     Rating: ratingValue,
     RatingParts: ratingParts,
@@ -451,13 +472,11 @@ export default function TradePreviewBuilder() {
   const [dbMeta, setDbMeta] = useState(null);
   const [lastDbQuery, setLastDbQuery] = useState(null);
   const [isDragging, setIsDragging] = useState(false);
-  const [batchSize, setBatchSize] = useState(50);
-  const [visibleCount, setVisibleCount] = useState(50);
+  const [rowsPerPage, setRowsPerPage] = useState(50);
+  const [currentPage, setCurrentPage] = useState(1);
   const headerRowRef = useRef(null);
   const tableScrollRef = useRef(null);
-  const sentinelRef = useRef(null);
   const uploadedFilesRef = useRef(new Set());
-  const [virtualWindow, setVirtualWindow] = useState({ start: 0, end: 0 });
   const [filterTop, setFilterTop] = useState('0px');
   const [summarySearch, setSummarySearch] = useState('');
   const filtersSignature = JSON.stringify(filters);
@@ -512,7 +531,7 @@ export default function TradePreviewBuilder() {
     setPickedFiles([]);
     setRows([]);
     resetFilters();
-    setVisibleCount(batchSize);
+    setCurrentPage(1);
     setServerSyncSummaries([]);
     setServerSyncError('');
     setShowAggregated(false);
@@ -736,8 +755,8 @@ export default function TradePreviewBuilder() {
               Maturity: toDate(row[maturityIdx]),
               "Amount (Rs lacs)": amountLacs,
               "Price (Rs)": parseFloat(row[priceIdx]) || 0,
-              Yield: String(row[yieldIdx] || "").trim(),
-              Status: String(row[statusIdx] || "").trim(),
+              Yield: sanitizeDisplayValue(row[yieldIdx]),
+              Status: sanitizeDisplayValue(row[statusIdx]),
               "Deal Type": dealType,
               Rating: "",
             });
@@ -769,7 +788,7 @@ export default function TradePreviewBuilder() {
               Maturity: toDate(row[maturityIdx]),
               "Amount (Rs lacs)": amountLacs,
               "Price (Rs)": parseFloat(row[priceIdx]) || 0,
-              Yield: String(row[yieldIdx] || "").trim(),
+              Yield: sanitizeDisplayValue(row[yieldIdx]),
               Status: "",
               "Deal Type": orderType,
               Rating: "",
@@ -799,7 +818,7 @@ export default function TradePreviewBuilder() {
       sortRowsDescending(tradeRows);
 
       setRows(tradeRows);
-      setVisibleCount(Math.min(batchSize, tradeRows.length));
+      setCurrentPage(1);
       setUsingDatabase(false);
       setDbMeta(null);
       setLastDbQuery(null);
@@ -861,7 +880,7 @@ export default function TradePreviewBuilder() {
       sortRowsDescending(mappedRows);
 
       setRows(mappedRows);
-      setVisibleCount(Math.min(batchSize, mappedRows.length));
+      setCurrentPage(1);
       setUsingDatabase(true);
       setDbMeta({
         success: true,
@@ -890,7 +909,7 @@ export default function TradePreviewBuilder() {
     } finally {
       setBusy(false);
     }
-  }, [filters.exchange, filters.rating, filters.tradeDate, batchSize]);
+  }, [filters.exchange, filters.rating, filters.tradeDate, filters.startDate, filters.endDate]);
 
   const activeRatingGroup = useMemo(() => {
     const input = (filters.rating || '').trim();
@@ -1174,7 +1193,7 @@ export default function TradePreviewBuilder() {
         row.raw?.yieldValue
       );
 
-      if (amount === null || amount <= 0 || yieldValue === null) {
+      if (amount === null || amount <= 0) {
         return;
       }
 
@@ -1207,6 +1226,7 @@ export default function TradePreviewBuilder() {
           tradeCount: 0,
           sumAmount: 0,
           weightedNumerator: 0,
+          weightedDenominator: 0,
           brokerYtmSet: new Set(),
         };
         bucketEntry.set(compositeKey, summary);
@@ -1214,7 +1234,10 @@ export default function TradePreviewBuilder() {
 
       summary.tradeCount += 1;
       summary.sumAmount += amount;
-      summary.weightedNumerator += yieldValue * amount;
+      if (yieldValue !== null) {
+        summary.weightedNumerator += yieldValue * amount;
+        summary.weightedDenominator += amount;
+      }
 
       const brokerLabel = [row['Deal Type'], row.Yield].filter(Boolean).join(' / ');
       if (brokerLabel) {
@@ -1235,7 +1258,7 @@ export default function TradePreviewBuilder() {
               tradeCount: entry.tradeCount,
               sumAmount: entry.sumAmount,
               weightedAverage:
-                entry.sumAmount > 0 ? entry.weightedNumerator / entry.sumAmount : null,
+                entry.weightedDenominator > 0 ? entry.weightedNumerator / entry.weightedDenominator : null,
               brokerYtm:
                 entry.brokerYtmSet.size > 0 ? Array.from(entry.brokerYtmSet).join(', ') : '-',
             }))
@@ -1326,92 +1349,42 @@ export default function TradePreviewBuilder() {
     currentRatingPage * ratingsPerPage
   );
 
-  const loadedRows = useMemo(
-    () => filteredRows.slice(0, visibleCount),
-    [filteredRows, visibleCount]
-  );
-  const hasMoreRows = visibleCount < filteredRows.length;
+  const totalTradePages = useMemo(() => {
+    if (filteredRows.length === 0) return 1;
+    return Math.max(1, Math.ceil(filteredRows.length / rowsPerPage));
+  }, [filteredRows.length, rowsPerPage]);
 
-  const updateVirtualWindow = useCallback(
-    (scrollPos = 0) => {
-      const container = tableScrollRef.current;
-      const total = loadedRows.length;
-      if (!container || total === 0) {
-        setVirtualWindow({ start: 0, end: total });
-        return;
-      }
+  const currentTradePage = Math.min(currentPage, totalTradePages);
+  const paginatedRows = useMemo(() => {
+    if (filteredRows.length === 0) return [];
+    const start = (currentTradePage - 1) * rowsPerPage;
+    return filteredRows.slice(start, start + rowsPerPage);
+  }, [filteredRows, currentTradePage, rowsPerPage]);
 
-      const viewport = container.clientHeight || 0;
-      const start = Math.max(
-        0,
-        Math.floor(scrollPos / VIRTUAL_ROW_HEIGHT) - VIRTUAL_BUFFER_ROWS
-      );
-      const end = Math.min(
-        total,
-        Math.ceil((scrollPos + viewport) / VIRTUAL_ROW_HEIGHT) + VIRTUAL_BUFFER_ROWS
-      );
-
-      setVirtualWindow((prev) =>
-        prev.start === start && prev.end === end ? prev : { start, end }
-      );
-    },
-    [loadedRows.length]
-  );
-
-  const handleScroll = useCallback(() => {
-    const container = tableScrollRef.current;
-    if (!container) return;
-    updateVirtualWindow(container.scrollTop);
-  }, [updateVirtualWindow]);
-
-  React.useEffect(() => {
-    const baseline = filteredRows.length === 0 ? 0 : Math.min(batchSize, filteredRows.length);
-    setVisibleCount(baseline);
+  useEffect(() => {
+    setCurrentPage(1);
     setRatingPage(1);
-    updateVirtualWindow(0);
-  }, [filtersSignature, batchSize, filteredRows.length]);
+  }, [filtersSignature, filteredRows.length]);
 
-  React.useEffect(() => {
+  useEffect(() => {
     setRatingPage(1);
   }, [summarySearch, ratingsPerPage]);
 
-  React.useEffect(() => {
+  useEffect(() => {
+    setCurrentPage((prev) => Math.min(prev, totalTradePages));
+  }, [totalTradePages]);
+
+  useEffect(() => {
     const container = tableScrollRef.current;
-    updateVirtualWindow(container ? container.scrollTop : 0);
-  }, [loadedRows.length, updateVirtualWindow]);
+    if (container) {
+      container.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+  }, [currentTradePage, rowsPerPage]);
 
-  const virtualRows = useMemo(() => {
-    if (virtualWindow.end <= virtualWindow.start) return [];
-    return loadedRows.slice(virtualWindow.start, virtualWindow.end);
-  }, [loadedRows, virtualWindow]);
-
-  const topSpacerHeight = Math.max(0, virtualWindow.start * VIRTUAL_ROW_HEIGHT);
-  const bottomSpacerHeight = Math.max(
-    0,
-    (loadedRows.length - virtualWindow.end) * VIRTUAL_ROW_HEIGHT
-  );
-
-  React.useEffect(() => {
-    const scrollRoot = tableScrollRef.current;
-    const sentinel = sentinelRef.current;
-    if (!scrollRoot || !sentinel) return;
-
-    const observer = new IntersectionObserver(
-      (entries) => {
-        const entry = entries[0];
-        if (entry && entry.isIntersecting) {
-          setVisibleCount((prev) => {
-            if (prev >= filteredRows.length) return prev;
-            return Math.min(prev + batchSize, filteredRows.length);
-          });
-        }
-      },
-      { root: scrollRoot, rootMargin: '0px 0px 120px 0px', threshold: 0.1 }
-    );
-
-    observer.observe(sentinel);
-    return () => observer.disconnect();
-  }, [filteredRows.length, batchSize]);
+  const pageStartIndex = filteredRows.length === 0 ? 0 : (currentTradePage - 1) * rowsPerPage + 1;
+  const pageEndIndex = filteredRows.length === 0
+    ? 0
+    : Math.min((currentTradePage - 1) * rowsPerPage + paginatedRows.length, filteredRows.length);
 
   return (
     <div className="tp-page min-h-screen bg-slate-50/80 px-3 py-6 sm:px-6 lg:px-10">
@@ -1655,7 +1628,9 @@ export default function TradePreviewBuilder() {
               </div>
               <div className="flex flex-col gap-2 text-sm sm:items-end sm:text-right">
                 <div className="rounded-lg bg-white/10 px-4 py-2 font-medium text-blue-50 backdrop-blur-sm">
-                  Showing {loadedRows.length.toLocaleString()} of {filteredRows.length.toLocaleString()}
+                  {filteredRows.length === 0
+                    ? 'No trades match the current filters'
+                    : `Showing ${pageStartIndex.toLocaleString()} – ${pageEndIndex.toLocaleString()} of ${filteredRows.length.toLocaleString()} trades`}
                   {filteredRows.length < rows.length && ` (filtered from ${rows.length.toLocaleString()})`}
                 </div>
                 {usingDatabase && dbFiltersChanged && (
@@ -1691,7 +1666,7 @@ export default function TradePreviewBuilder() {
                     type="date"
                     value={filters.startDate}
                     onChange={(e) => setFilters((prev) => ({ ...prev, startDate: e.target.value }))}
-                    className="mt-1 rounded-md border border-blue-200 px-3 py-1 text-sm text-slate-700 focus:border-blue-500 focus:ring-blue-500"
+                    className="mt-1 rounded-md border border-blue-200 px-3 py-1 text-sm text-slate-700 focus:border-indigo-500 focus:ring-indigo-500"
                   />
                 </label>
                 <label className="flex flex-col text-xs font-semibold text-blue-900 sm:text-sm">
@@ -1700,7 +1675,7 @@ export default function TradePreviewBuilder() {
                     type="date"
                     value={filters.endDate}
                     onChange={(e) => setFilters((prev) => ({ ...prev, endDate: e.target.value }))}
-                    className="mt-1 rounded-md border border-blue-200 px-3 py-1 text-sm text-slate-700 focus:border-blue-500 focus:ring-blue-500"
+                    className="mt-1 rounded-md border border-blue-200 px-3 py-1 text-sm text-slate-700 focus:border-indigo-500 focus:ring-indigo-500"
                   />
                 </label>
                 <div className="flex flex-wrap items-center gap-2">
@@ -1782,164 +1757,163 @@ export default function TradePreviewBuilder() {
             <div className="w-full overflow-x-auto">
               <div
                 ref={tableScrollRef}
-                onScroll={handleScroll}
                 className="tp-scroll max-h-[calc(100vh-320px)] overflow-y-auto"
               >
                 <table className="tp-table min-w-[1200px] w-full table-auto border-collapse">
                 <thead>
                   <tr
                     ref={headerRowRef}
-                    className="bg-gray-100 sticky top-0 z-20 shadow-sm"
+                    className="sticky top-0 z-30 bg-gradient-to-r from-slate-900 via-indigo-900 to-slate-800 text-white shadow-md"
                   >
-                    <th className="px-2 py-2 text-left text-xs font-bold text-gray-700 uppercase tracking-wide border-b border-gray-300 border-r border-gray-200">
+                    <th className="px-3 py-3 text-left text-base font-semibold uppercase tracking-[0.18em] text-white border-b border-slate-700 border-r border-slate-800">
                       Exchange
                     </th>
-                    <th className="px-2 py-2 text-left text-xs font-bold text-gray-700 uppercase tracking-wide border-b border-gray-300 border-r border-gray-200">
+                    <th className="px-3 py-3 text-left text-base font-semibold uppercase tracking-[0.18em] text-white border-b border-slate-700 border-r border-slate-800">
                       Trade Date
                     </th>
-                    <th className="px-2 py-2 text-left text-xs font-bold text-gray-700 uppercase tracking-wide border-b border-gray-300 border-r border-gray-200">
+                    <th className="px-3 py-3 text-left text-base font-semibold uppercase tracking-[0.18em] text-white border-b border-slate-700 border-r border-slate-800">
                       Trade Time
                     </th>
-                    <th className="px-2 py-2 text-left text-xs font-bold text-gray-700 uppercase tracking-wide border-b border-gray-300 border-r border-gray-200">
+                    <th className="px-3 py-3 text-left text-base font-semibold uppercase tracking-[0.18em] text-white border-b border-slate-700 border-r border-slate-800">
                       ISIN
                     </th>
-                    <th className="px-2 py-2 text-left text-xs font-bold text-gray-700 uppercase tracking-wide border-b border-gray-300 border-r border-gray-200">
+                    <th className="px-3 py-3 text-left text-base font-semibold uppercase tracking-[0.18em] text-white border-b border-slate-700 border-r border-slate-800">
                       Issuer Details
                     </th>
-                    <th className="px-2 py-2 text-left text-xs font-bold text-gray-700 uppercase tracking-wide border-b border-gray-300 border-r border-gray-200">
+                    <th className="px-3 py-3 text-left text-base font-semibold uppercase tracking-[0.18em] text-white border-b border-slate-700 border-r border-slate-800">
                       Maturity
                     </th>
-                    <th className="px-2 py-2 text-right text-xs font-bold text-gray-700 uppercase tracking-wide border-b border-gray-300 border-r border-gray-200">
+                    <th className="px-3 py-3 text-right text-base font-semibold uppercase tracking-[0.18em] text-white border-b border-slate-700 border-r border-slate-800">
                       Amount (INR Lacs)
                     </th>
-                    <th className="px-2 py-2 text-right text-xs font-bold text-gray-700 uppercase tracking-wide border-b border-gray-300 border-r border-gray-200">
+                    <th className="px-3 py-3 text-right text-base font-semibold uppercase tracking-[0.18em] text-white border-b border-slate-700 border-r border-slate-800">
                       Price (INR)
                     </th>
-                    <th className="px-2 py-2 text-center text-xs font-bold text-gray-700 uppercase tracking-wide border-b border-gray-300 border-r border-gray-200">
+                    <th className="px-3 py-3 text-center text-base font-semibold uppercase tracking-[0.18em] text-white border-b border-slate-700 border-r border-slate-800">
                       Yield
                     </th>
-                    <th className="px-2 py-2 text-left text-xs font-bold text-gray-700 uppercase tracking-wide border-b border-gray-300 border-r border-gray-200">
+                    <th className="px-3 py-3 text-left text-base font-semibold uppercase tracking-[0.18em] text-white border-b border-slate-700 border-r border-slate-800">
                       Status
                     </th>
-                    <th className="px-2 py-2 text-left text-xs font-bold text-gray-700 uppercase tracking-wide border-b border-gray-300 border-r border-gray-200">
+                    <th className="px-3 py-3 text-left text-base font-semibold uppercase tracking-[0.18em] text-white border-b border-slate-700 border-r border-slate-800">
                       Deal Type
                     </th>
                     {Array.from({ length: maxRatingColumns }).map((_, idx) => (
                       <th
                         key={`rating-header-${idx}`}
-                        className={`px-2 py-2 text-left text-xs font-bold text-gray-700 uppercase tracking-wide border-b border-gray-300 ${idx === maxRatingColumns - 1 ? "" : "border-r border-gray-200"}`}
+                        className={`px-3 py-3 text-left text-base font-semibold uppercase tracking-[0.18em] text-white border-b border-slate-700 ${idx === maxRatingColumns - 1 ? "" : "border-r border-slate-800"}`}
                       >
                         {maxRatingColumns > 1 ? `Rating ${idx + 1}` : "Rating"}
                       </th>
                     ))}
                   </tr>
                   <tr
-                    className="bg-white sticky z-10"
+                    className="sticky z-20 bg-white/95 backdrop-blur-sm border-b border-slate-200"
                     style={{ top: filterTop }}
                   >
-                    <th className="px-2 py-1.5 border-b-2 border-gray-300 border-r border-gray-200">
+                    <th className="px-3 py-2 border-b border-slate-200 border-r border-slate-200">
                       <input
                         type="text"
                         value={filters.exchange}
                         onChange={(e) => setFilters({ ...filters, exchange: e.target.value })}
                         placeholder="Filter..."
-                        className="tp-input w-full px-2 py-1 text-xs border border-gray-300 rounded focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
+                        className="tp-input w-full px-2 py-1 text-xs border border-slate-300 rounded focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500"
                       />
                     </th>
-                    <th className="px-2 py-1.5 border-b-2 border-gray-300 border-r border-gray-200">
+                    <th className="px-3 py-2 border-b border-slate-200 border-r border-slate-200">
                       <input
                         type="text"
                         value={filters.tradeDate}
                         onChange={(e) => setFilters({ ...filters, tradeDate: e.target.value })}
                         placeholder="Filter..."
-                        className="tp-input w-full px-2 py-1 text-xs border border-gray-300 rounded focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
+                        className="tp-input w-full px-2 py-1 text-xs border border-slate-300 rounded focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500"
                       />
                     </th>
-                    <th className="px-2 py-1.5 border-b-2 border-gray-300 border-r border-gray-200">
+                    <th className="px-3 py-2 border-b border-slate-200 border-r border-slate-200">
                       <input
                         type="text"
                         value={filters.tradeTime}
                         onChange={(e) => setFilters({ ...filters, tradeTime: e.target.value })}
                         placeholder="Filter..."
-                        className="tp-input w-full px-2 py-1 text-xs border border-gray-300 rounded focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
+                        className="tp-input w-full px-2 py-1 text-xs border border-slate-300 rounded focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500"
                       />
                     </th>
-                    <th className="px-2 py-1.5 border-b-2 border-gray-300 border-r border-gray-200">
+                    <th className="px-3 py-2 border-b border-slate-200 border-r border-slate-200">
                       <input
                         type="text"
                         value={filters.isin}
                         onChange={(e) => setFilters({ ...filters, isin: e.target.value })}
                         placeholder="Filter..."
-                        className="tp-input w-full px-2 py-1 text-xs border border-gray-300 rounded focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
+                        className="tp-input w-full px-2 py-1 text-xs border border-slate-300 rounded focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500"
                       />
                     </th>
-                    <th className="px-2 py-1.5 border-b-2 border-gray-300 border-r border-gray-200">
+                    <th className="px-3 py-2 border-b border-slate-200 border-r border-slate-200">
                       <input
                         type="text"
                         value={filters.issuerDetails}
                         onChange={(e) => setFilters({ ...filters, issuerDetails: e.target.value })}
                         placeholder="Filter..."
-                        className="tp-input w-full px-2 py-1 text-xs border border-gray-300 rounded focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
+                        className="tp-input w-full px-2 py-1 text-xs border border-slate-300 rounded focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500"
                       />
                     </th>
-                    <th className="px-2 py-1.5 border-b-2 border-gray-300 border-r border-gray-200">
+                    <th className="px-3 py-2 border-b border-slate-200 border-r border-slate-200">
                       <input
                         type="text"
                         value={filters.maturity}
                         onChange={(e) => setFilters({ ...filters, maturity: e.target.value })}
                         placeholder="Filter..."
-                        className="tp-input w-full px-2 py-1 text-xs border border-gray-300 rounded focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
+                        className="tp-input w-full px-2 py-1 text-xs border border-slate-300 rounded focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500"
                       />
                     </th>
-                    <th className="px-2 py-1.5 border-b-2 border-gray-300 border-r border-gray-200">
+                    <th className="px-3 py-2 border-b border-slate-200 border-r border-slate-200">
                       <input
                         type="text"
                         value={filters.minAmt}
                         onChange={(e) => setFilters({ ...filters, minAmt: e.target.value })}
                         placeholder="Min..."
-                        className="tp-input w-full px-2 py-1 text-xs border border-gray-300 rounded focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
+                        className="tp-input w-full px-2 py-1 text-xs border border-slate-300 rounded focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500"
                       />
                     </th>
-                    <th className="px-2 py-1.5 border-b-2 border-gray-300 border-r border-gray-200">
+                    <th className="px-3 py-2 border-b border-slate-200 border-r border-slate-200">
                       <input
                         type="text"
                         value={filters.minPrice}
                         onChange={(e) => setFilters({ ...filters, minPrice: e.target.value })}
                         placeholder="Min..."
-                        className="tp-input w-full px-2 py-1 text-xs border border-gray-300 rounded focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
+                        className="tp-input w-full px-2 py-1 text-xs border border-slate-300 rounded focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500"
                       />
                     </th>
-                    <th className="px-2 py-1.5 border-b-2 border-gray-300 border-r border-gray-200">
+                    <th className="px-3 py-2 border-b border-slate-200 border-r border-slate-200">
                       <input
                         type="text"
                         value={filters.yield}
                         onChange={(e) => setFilters({ ...filters, yield: e.target.value })}
                         placeholder="Filter..."
-                        className="tp-input w-full px-2 py-1 text-xs border border-gray-300 rounded focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
+                        className="tp-input w-full px-2 py-1 text-xs border border-slate-300 rounded focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500"
                       />
                     </th>
-                    <th className="px-2 py-1.5 border-b-2 border-gray-300 border-r border-gray-200">
+                    <th className="px-3 py-2 border-b border-slate-200 border-r border-slate-200">
                       <input
                         type="text"
                         value={filters.status}
                         onChange={(e) => setFilters({ ...filters, status: e.target.value })}
                         placeholder="Filter..."
-                        className="tp-input w-full px-2 py-1 text-xs border border-gray-300 rounded focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
+                        className="tp-input w-full px-2 py-1 text-xs border border-slate-300 rounded focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500"
                       />
                     </th>
-                    <th className="px-2 py-1.5 border-b-2 border-gray-300 border-r border-gray-200">
+                    <th className="px-3 py-2 border-b border-slate-200 border-r border-slate-200">
                       <input
                         type="text"
                         value={filters.dealType}
                         onChange={(e) => setFilters({ ...filters, dealType: e.target.value })}
                         placeholder="Filter..."
-                        className="tp-input w-full px-2 py-1 text-xs border border-gray-300 rounded focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
+                        className="tp-input w-full px-2 py-1 text-xs border border-slate-300 rounded focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500"
                       />
                     </th>
                     {Array.from({ length: maxRatingColumns }).map((_, idx) => (
                       <th
                         key={`rating-filter-${idx}`}
-                        className={`px-2 py-1.5 border-b-2 border-gray-300 ${idx === maxRatingColumns - 1 ? "" : "border-r border-gray-200"}`}
+                        className={`px-3 py-2 border-b border-slate-200 ${idx === maxRatingColumns - 1 ? "" : "border-r border-gray-200"}`}
                       >
                         {idx === 0 ? (
                           <input
@@ -1947,7 +1921,7 @@ export default function TradePreviewBuilder() {
                             value={filters.rating}
                             onChange={(e) => setFilters({ ...filters, rating: e.target.value })}
                             placeholder="Filter..."
-                            className="tp-input w-full px-2 py-1 text-xs border border-gray-300 rounded focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
+                            className="tp-input w-full px-2 py-1 text-xs border border-slate-300 rounded focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500"
                           />
                         ) : null}
                       </th>
@@ -1956,149 +1930,132 @@ export default function TradePreviewBuilder() {
                 </thead>
 
                 <tbody className="bg-white text-slate-700">
-                  {loadedRows.length === 0 ? (
+                  {paginatedRows.length === 0 ? (
                     <tr>
                       <td colSpan={11 + maxRatingColumns} className="px-6 py-12 text-center">
-                        <div className="text-gray-500">
-                          <p className="text-lg font-semibold mb-2">No transactions match your filters</p>
+                        <div className="text-slate-500">
+                          <p className="mb-2 text-lg font-semibold">No transactions match your filters</p>
                           <p className="text-sm">Try adjusting or clearing the filters above</p>
                         </div>
                       </td>
                     </tr>
                   ) : (
-                    <>
-                      {topSpacerHeight > 0 && (
-                        <tr className="tp-virtual-pad" aria-hidden="true" style={{ height: `${topSpacerHeight}px` }}>
-                          <td colSpan={11 + maxRatingColumns} />
-                        </tr>
-                      )}
-                      {virtualRows.map((row, idx) => {
-                        const rowIndex = virtualWindow.start + idx;
-                        const zebra = rowIndex % 2 === 0 ? 'bg-white' : 'bg-gray-50';
-                        const rowKey =
-                          row.rowKey ??
-                          `${row.ISIN || 'isin'}-${row["Trade Time"] || rowIndex}-${rowIndex}`;
-                        return (
-                          <tr
-                            key={rowKey}
-                            className={`border-b border-gray-200 transition-colors hover:bg-gradient-to-br from-blue-100 via-blue-50 to-white ${zebra}`}
-                          >
-                            <td className="px-3 py-2.5 text-sm border-r border-gray-200">
-                              <span
-                                className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold ${
-                                  row.Exchange === 'NSE'
-                                    ? 'bg-green-100 text-green-800 border border-green-200'
-                                    : 'bg-blue-100 text-blue-800 border border-blue-200'
-                                }`}
-                              >
-                                {row.Exchange}
-                              </span>
-                            </td>
-                            <td className="px-3 py-2.5 text-sm text-gray-800 border-r border-gray-200 font-medium">
-                              {row["Trade Date"]}
-                            </td>
-                            <td className="px-3 py-2.5 text-sm text-gray-700 border-r border-gray-200 font-mono">
-                              {row["Trade Time"]}
-                            </td>
-                            <td
-                              className="px-3 py-2.5 tp-isin text-gray-900 font-mono border-r border-gray-200 whitespace-normal break-words bg-gray-50"
-                              title={row.ISIN}
+                    paginatedRows.map((row, idx) => {
+                      const absoluteIndex = (currentTradePage - 1) * rowsPerPage + idx;
+                      const zebra = absoluteIndex % 2 === 0 ? 'bg-white' : 'bg-slate-50';
+                      const rowKey =
+                        row.rowKey ??
+                        `${row.ISIN || 'isin'}-${row["Trade Time"] || absoluteIndex}-${absoluteIndex}`;
+
+                      const statusLabel = String(row.Status || 'Pending');
+                      const statusClass = statusLabel.toLowerCase().includes('success') ||
+                        statusLabel.toLowerCase().includes('settled')
+                        ? 'border-emerald-300 bg-emerald-50 text-emerald-700'
+                        : statusLabel.toLowerCase().includes('pending')
+                        ? 'border-amber-300 bg-amber-50 text-amber-700'
+                        : 'border-slate-300 bg-slate-100 text-slate-700';
+
+                      return (
+                        <tr
+                          key={rowKey}
+                          className={`border-b border-slate-200 transition-colors hover:bg-sky-50 ${zebra}`}
+                        >
+                          <td className="px-3 py-3 text-sm border-r border-slate-200">
+                            <span
+                              className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold ${
+                                row.Exchange === 'NSE'
+                                  ? 'bg-emerald-100 text-emerald-700 border border-emerald-200'
+                                  : 'bg-blue-100 text-blue-700 border border-blue-200'
+                              }`}
                             >
-                              {row.ISIN}
-                            </td>
-                            <td
-                              className="px-3 py-2.5 text-sm text-gray-700 border-r border-gray-200 whitespace-normal break-words font-medium"
-                              title={row["Issuer details"]}
-                            >
-                              {row["Issuer details"]}
-                            </td>
-                            <td className="px-3 py-2.5 text-sm text-gray-700 border-r border-gray-200">
-                              {row.Maturity}
-                            </td>
-                            <td className="px-3 py-2.5 text-sm text-blue-900 text-right font-bold border-r border-gray-200">
-                              {Number(row["Amount (Rs lacs)"] ?? 0).toFixed(4)}
-                            </td>
-                            <td className="px-3 py-2.5 text-sm text-green-900 text-right font-bold border-r border-gray-200">
-                              Rs {Number(row["Price (Rs)"] ?? 0).toFixed(2)}
-                            </td>
-                            <td className="px-3 py-2.5 text-sm text-gray-700 border-r border-gray-200 text-center">
-                              {row.Yield}
-                            </td>
-                            <td className="px-3 py-2.5 text-sm border-r border-gray-200">
-                              <span
-                                className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-semibold whitespace-nowrap ${
-                                  row.Status.toLowerCase().includes('success') ||
-                                  row.Status.toLowerCase().includes('settled')
-                                    ? 'bg-green-100 text-green-800 border border-green-300'
-                                    : row.Status.toLowerCase().includes('pending')
-                                    ? 'bg-yellow-100 text-yellow-800 border border-yellow-300'
-                                    : 'bg-gray-100 text-gray-700 border border-gray-300'
-                                }`}
-                              >
-                                {row.Status}
-                              </span>
-                            </td>
-                            <td className="px-3 py-2.5 text-sm border-r border-gray-200">
-                              <span
-                                className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-semibold whitespace-nowrap ${
-                                  row["Deal Type"].toUpperCase().includes('DIRECT')
-                                    ? 'bg-purple-100 text-purple-800 border border-purple-300'
-                                    : 'bg-orange-100 text-orange-800 border border-orange-300'
-                                }`}
-                              >
-                                {row["Deal Type"]}
-                              </span>
-                            </td>
-                            {Array.from({ length: maxRatingColumns }).map((_, ratingIdx) => {
-                              const ratingValue = row.RatingParts?.[ratingIdx] || "";
-                              return (
-                                <td
-                                  key={`rating-${rowKey}-${ratingIdx}`}
-                                  className={`px-3 py-2.5 text-xs text-gray-700 whitespace-normal break-words font-semibold${
-                                    ratingIdx === maxRatingColumns - 1 ? "" : " border-r border-gray-200"
-                                  }`}
-                                  title={ratingValue || undefined}
-                                >
-                                  {ratingValue || "-"}
-                                </td>
-                              );
-                            })}
-                          </tr>
-                        );
-                      })}
-                      {hasMoreRows && loadedRows.length > 0 && (
-                        <tr ref={sentinelRef}>
-                          <td colSpan={11 + maxRatingColumns} className="tp-loading-row px-3 py-4 text-center text-sm text-gray-500">
-                            Loading more trades...
+                              {row.Exchange || '-'}
+                            </span>
                           </td>
+                          <td className="px-3 py-3 text-sm font-semibold text-slate-800 border-r border-slate-200">
+                            {row["Trade Date"] || '-'}
+                          </td>
+                          <td className="px-3 py-3 text-sm font-mono text-slate-600 border-r border-slate-200">
+                            {row["Trade Time"] || '-'}
+                          </td>
+                          <td
+                            className="px-3 py-3 tp-isin bg-slate-50 font-mono text-sm text-slate-900 border-r border-slate-200 whitespace-normal break-words"
+                            title={row.ISIN}
+                          >
+                            {row.ISIN || '-'}
+                          </td>
+                          <td
+                            className="px-3 py-3 text-sm font-medium text-slate-700 border-r border-slate-200 whitespace-normal break-words"
+                            title={row["Issuer details"]}
+                          >
+                            {row["Issuer details"] || '-'}
+                          </td>
+                          <td className="px-3 py-3 text-sm text-slate-700 border-r border-slate-200">
+                            {row.Maturity || '-'}
+                          </td>
+                          <td className="px-3 py-3 text-sm font-bold text-indigo-700 text-right border-r border-slate-200">
+                            {Number(row["Amount (Rs lacs)"] ?? 0).toFixed(4)}
+                          </td>
+                          <td className="px-3 py-3 text-sm font-bold text-emerald-700 text-right border-r border-slate-200">
+                            Rs {Number(row["Price (Rs)"] ?? 0).toFixed(2)}
+                          </td>
+                          <td className="px-3 py-3 text-sm font-semibold text-center text-sky-700 border-r border-slate-200">
+                            {row.Yield || '-'}
+                          </td>
+                          <td className="px-3 py-3 text-sm text-slate-700 border-r border-slate-200">
+                            <span className={`inline-flex items-center rounded-md border px-2 py-0.5 text-xs font-semibold ${statusClass}`}>
+                              {statusLabel}
+                            </span>
+                          </td>
+                          <td className="px-3 py-3 text-sm border-r border-slate-200">
+                            <span
+                              className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-semibold whitespace-nowrap ${
+                                (row["Deal Type"] || '').toUpperCase().includes('DIRECT')
+                                  ? 'bg-purple-100 text-purple-700 border border-purple-200'
+                                  : 'bg-orange-100 text-orange-700 border border-orange-200'
+                              }`}
+                            >
+                              {row["Deal Type"] || '-'}
+                            </span>
+                          </td>
+                          {Array.from({ length: maxRatingColumns }).map((_, ratingIdx) => {
+                            const ratingValue = row.RatingParts?.[ratingIdx] || "";
+                            return (
+                              <td
+                                key={`rating-${rowKey}-${ratingIdx}`}
+                                className={`px-3 py-3 text-xs font-semibold text-slate-700 whitespace-normal break-words${
+                                  ratingIdx === maxRatingColumns - 1 ? "" : " border-r border-slate-200"
+                                }`}
+                                title={ratingValue || undefined}
+                              >
+                                {ratingValue || "-"}
+                              </td>
+                            );
+                          })}
                         </tr>
-                      )}
-                      {bottomSpacerHeight > 0 && (
-                        <tr className="tp-virtual-pad" aria-hidden="true" style={{ height: `${bottomSpacerHeight}px` }}>
-                          <td colSpan={11 + maxRatingColumns} />
-                        </tr>
-                      )}
-                    </>
+                      );
+                    })
                   )}
                 </tbody>
               </table>
             </div>
           </div>
-            <div className="tp-load-controls bg-gray-50 px-6 py-4 border-t border-gray-200">
+            <div className="tp-load-controls bg-slate-50 px-6 py-4 border-t border-slate-200">
               <div className="tp-load-controls__row">
                 <span className="tp-load-controls__status">
-                  Showing {loadedRows.length.toLocaleString()} of {filteredRows.length.toLocaleString()} trades
+                  {filteredRows.length === 0
+                    ? 'No trades to display'
+                    : `Showing ${pageStartIndex.toLocaleString()} – ${pageEndIndex.toLocaleString()} of ${filteredRows.length.toLocaleString()} trades`}
                 </span>
                 <label className="tp-load-controls__batch">
-                  <span>Rows per load:</span>
+                  <span>Rows per page:</span>
                   <select
-                    value={batchSize}
+                    value={rowsPerPage}
                     onChange={(e) => {
-                      const nextBatch = Number(e.target.value);
-                      setBatchSize(nextBatch);
-                      setVisibleCount(Math.min(nextBatch, filteredRows.length));
+                      const next = Number(e.target.value);
+                      setRowsPerPage(next);
+                      setCurrentPage(1);
                     }}
-                    className="tp-input px-3 py-1.5 border border-gray-300 rounded-md text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                    className="tp-input px-3 py-1.5 border border-slate-300 rounded-md text-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
                   >
                     <option value={25}>25</option>
                     <option value={50}>50</option>
@@ -2107,8 +2064,28 @@ export default function TradePreviewBuilder() {
                   </select>
                 </label>
               </div>
-              {!hasMoreRows && filteredRows.length > 0 && (
-                <p className="tp-load-controls__done">All available trades have been loaded.</p>
+              {filteredRows.length > 0 && (
+                <div className="tp-load-controls__pager">
+                  <button
+                    type="button"
+                    className="tp-btn px-3 py-1.5 text-sm border border-indigo-200 bg-white text-indigo-600 shadow-sm hover:bg-indigo-50 disabled:border-slate-200 disabled:text-slate-400"
+                    onClick={() => setCurrentPage((prev) => Math.max(1, prev - 1))}
+                    disabled={currentTradePage === 1}
+                  >
+                    Prev
+                  </button>
+                  <span className="tp-load-controls__page-indicator text-sm font-semibold text-slate-700">
+                    Page {currentTradePage} of {totalTradePages}
+                  </span>
+                  <button
+                    type="button"
+                    className="tp-btn px-3 py-1.5 text-sm border border-indigo-200 bg-white text-indigo-600 shadow-sm hover:bg-indigo-50 disabled:border-slate-200 disabled:text-slate-400"
+                    onClick={() => setCurrentPage((prev) => Math.min(totalTradePages, prev + 1))}
+                    disabled={currentTradePage === totalTradePages}
+                  >
+                    Next
+                  </button>
+                </div>
               )}
             </div>
 
@@ -2122,13 +2099,13 @@ export default function TradePreviewBuilder() {
                       value={summarySearch}
                       onChange={(e) => setSummarySearch(e.target.value)}
                       placeholder="Search aggregated results..."
-                      className="tp-input flex-1 sm:flex-initial min-w-[200px] px-3 py-2 border border-gray-300 rounded-md text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                      className="tp-input flex-1 sm:flex-initial min-w-[200px] px-3 py-2 border border-slate-300 rounded-md text-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
                     />
                     {summarySearch && (
                       <button
                         type="button"
                         onClick={() => setSummarySearch('')}
-                        className="tp-btn tp-btn--outline px-3 py-2 text-sm font-medium text-gray-700 border border-gray-300 rounded-md hover:bg-gray-100 transition-colors"
+                        className="tp-btn tp-btn--outline px-3 py-2 text-sm font-medium text-gray-700 border border-slate-300 rounded-md hover:bg-gray-100 transition-colors"
                       >
                         Clear
                       </button>
@@ -2214,7 +2191,7 @@ export default function TradePreviewBuilder() {
                         <select
                           value={ratingsPerPage}
                           onChange={(e) => setRatingsPerPage(Number(e.target.value))}
-                          className="tp-input px-3 py-1.5 border border-gray-300 rounded-md text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                          className="tp-input px-3 py-1.5 border border-slate-300 rounded-md text-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
                         >
                           <option value={1}>1</option>
                           <option value={2}>2</option>
