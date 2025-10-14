@@ -1,0 +1,12 @@
+*** Begin Patch
+*** Update File: backend/routes/trading.js
+@@
+-  const cleaned = String(value)
+-    .replace(/[,?,1]/g, '')
+-    .trim();
++  const cleaned = String(value)
++    .replace(/[,?]/g, '')
++    .replace(/[^0-9.+-]/g, '')
++    .trim();
+*** End Patch
+

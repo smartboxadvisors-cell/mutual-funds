@@ -28,10 +28,10 @@ export default function Navigation() {
             Trading
           </Link>
           <Link
-            to="/portfolio"
-            className={`${styles.navLink} ${location.pathname === '/portfolio' ? styles.active : ''}`}
+            to="/issuer-portfolio"
+            className={`${styles.navLink} ${location.pathname === '/issuer-portfolio' ? styles.active : ''}`}
           >
-            Portfolio
+            Issuer Portfolio
           </Link>
         </div>
 

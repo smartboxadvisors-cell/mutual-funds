@@ -1068,7 +1068,7 @@ export default function TradePreviewBuilder() {
   }, [usingDatabase, lastDbQuery, dbFiltersChanged, fetchFromDatabase, busy]);
 
   React.useEffect(() => {
-    fetchFromDatabase({ allowEmptyFilters: true, initial: true });
+    fetchFromDatabase({ allowEmptyFilters: true });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 

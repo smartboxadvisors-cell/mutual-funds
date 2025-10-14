@@ -2,7 +2,7 @@ import { BrowserRouter as Router, Route, Routes, Navigate } from 'react-router-d
 import ImportsTable from './components/ImportsTable';
 import Login from './components/Login';
 import Trading from './components/Trading'; // <-- new trading component
-import Portfolio from './components/Portfolio'; // <-- new portfolio component
+import IssuerPortfolio from './pages/IssuerPortfolio';
 import Navigation from './components/Navigation'; // <-- new navigation
 import './App.css';
 
@@ -43,14 +43,14 @@ export default function App() {
           }
         />
 
-        {/* Portfolio Dashboard */}
+        {/* Issuer Portfolio */}
         <Route
-          path="/portfolio"
+          path="/issuer-portfolio"
           element={
             <ProtectedRoute>
               <div>
                 <Navigation />
-                <Portfolio />
+                <IssuerPortfolio />
               </div>
             </ProtectedRoute>
           }
