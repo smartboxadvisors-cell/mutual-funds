@@ -1,4 +1,4 @@
-﻿.issuer-page {
+.issuer-page {
   min-height: 100vh;
   padding: 48px 16px 64px;
   background: linear-gradient(135deg, #f4f6ff, #e8edff 55%, #dfe4ff);
@@ -540,39 +540,7 @@
   width: 100%;
   border-collapse: collapse;
   font-size: 0.88rem;
-  table-layout: fixed;
-}
-
-.issuer-table colgroup col:nth-child(1) {
-  width: 20%;
-}
-
-.issuer-table colgroup col:nth-child(2) {
-  width: 23%;
-}
-
-.issuer-table colgroup col:nth-child(3) {
-  width: 12%;
-}
-
-.issuer-table colgroup col:nth-child(4) {
-  width: 10%;
-}
-
-.issuer-table colgroup col:nth-child(5) {
-  width: 17%;
-}
-
-.issuer-table colgroup col:nth-child(6) {
-  width: 7%;
-}
-
-.issuer-table colgroup col:nth-child(7) {
-  width: 4%;
-}
-
-.issuer-table colgroup col:nth-child(8) {
-  width: 4%;
+  table-layout: auto;
 }
 
 .issuer-table thead {
@@ -592,7 +560,8 @@
   letter-spacing: 0.08em;
   text-transform: uppercase;
   color: rgba(30, 41, 59, 0.7);
-  white-space: nowrap;
+  white-space: normal;
+  line-height: 1.3;
 }
 
 .issuer-table tbody tr:hover {
@@ -618,9 +587,11 @@
 .issuer-table__cell--mono {
   font-family: "JetBrains Mono", "Fira Code", monospace;
   font-size: 0.78rem;
-  letter-spacing: 0.12em;
+  letter-spacing: 0.08em;
   text-transform: uppercase;
   color: rgba(30, 41, 59, 0.7);
-  white-space: normal;
-  word-break: break-all;
+  white-space: nowrap;
+  word-break: normal;
 }
+
+
