@@ -3,6 +3,7 @@ import ImportsTable from './components/ImportsTable';
 import Login from './components/Login';
 import Trading from './components/Trading'; // <-- new trading component
 import IssuerPortfolio from './pages/IssuerPortfolio';
+import InvestorData from './pages/InvestorData'; // <-- new investor data page
 import Navigation from './components/Navigation'; // <-- new navigation
 import './App.css';
 
@@ -51,6 +52,19 @@ export default function App() {
               <div>
                 <Navigation />
                 <IssuerPortfolio />
+              </div>
+            </ProtectedRoute>
+          }
+        />
+
+        {/* Investor Data */}
+        <Route
+          path="/investor-data"
+          element={
+            <ProtectedRoute>
+              <div>
+                <Navigation />
+                <InvestorData />
               </div>
             </ProtectedRoute>
           }

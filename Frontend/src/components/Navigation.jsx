@@ -33,6 +33,12 @@ export default function Navigation() {
           >
             Issuer Portfolio
           </Link>
+          <Link
+            to="/investor-data"
+            className={`${styles.navLink} ${location.pathname === '/investor-data' ? styles.active : ''}`}
+          >
+            Investor Data
+          </Link>
         </div>
 
         <div className={styles.userInfo}>
