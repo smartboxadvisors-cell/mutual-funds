@@ -273,7 +273,14 @@ export default function InvestorData() {
                     <td>{item.report_date}</td>
                     <td>
                       {item.rating !== 'N/A' && (
-                        <span className={styles.badge}>{item.rating}</span>
+                        <div>
+                          <span className={styles.badge}>{item.rating}</span>
+                          {item.ratingGroup && (
+                            <div style={{ fontSize: '0.75rem', color: '#718096', marginTop: '0.25rem' }}>
+                              ({item.ratingGroup})
+                            </div>
+                          )}
+                        </div>
                       )}
                       {item.rating === 'N/A' && '-'}
                     </td>

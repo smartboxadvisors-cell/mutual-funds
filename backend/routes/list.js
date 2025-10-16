@@ -5,6 +5,7 @@ const router = express.Router();
 const InstrumentHolding = require('../models/InstrumentHolding');
 const Scheme = require('../models/Scheme');
 const Issuer = require('../models/issuer.model');
+const MasterRating = require('../models/MasterRating');
 
 const PROJECTION = {
   _id: 1,
@@ -448,16 +449,29 @@ router.get('/investor-data', async (req, res) => {
     const skip = (page - 1) * limit;
     const issuerSearch = req.query.issuer || '';
 
-    // Step 1: Find matching issuers from the Issuer (master list) collection
+    // Step 1: Find matching issuers from both Issuer and MasterRating collections
     let matchingIsins = [];
     if (issuerSearch.trim()) {
-      const matchingIssuers = await Issuer.find({
-        company: { $regex: escapeRegex(issuerSearch.trim()), $options: 'i' },
+      const searchRegex = { $regex: escapeRegex(issuerSearch.trim()), $options: 'i' };
+      
+      // Search in Issuer model (company field)
+      const matchingIssuersFromIssuer = await Issuer.find({
+        company: searchRegex,
       })
         .select('isin company')
         .lean();
       
-      matchingIsins = matchingIssuers.map(issuer => issuer.isin);
+      // Search in MasterRating model (issuerName field)
+      const matchingIssuersFromRating = await MasterRating.find({
+        issuerName: searchRegex,
+      })
+        .select('isin issuerName')
+        .lean();
+      
+      // Combine ISINs from both sources
+      const isinsFromIssuer = matchingIssuersFromIssuer.map(issuer => issuer.isin);
+      const isinsFromRating = matchingIssuersFromRating.map(issuer => issuer.isin);
+      matchingIsins = [...new Set([...isinsFromIssuer, ...isinsFromRating])];
       
       // If no matching issuers found, return empty result
       if (matchingIsins.length === 0) {
@@ -494,17 +508,45 @@ router.get('/investor-data', async (req, res) => {
       InstrumentHolding.countDocuments(filter),
     ]);
 
-    // Step 3: Fetch issuer details for all ISINs in the results
+    // Step 3: Fetch issuer details for all ISINs - prioritize MasterRating
     const isins = [...new Set(items.map(item => item.isin).filter(Boolean))];
     const issuerMap = {};
     
     if (isins.length > 0) {
+      // Get data from MasterRating model (PRIMARY SOURCE)
+      const masterRatings = await MasterRating.find({ isin: { $in: isins } })
+        .select('isin issuerName rating ratingGroup metadata')
+        .lean();
+      
+      // Get data from Issuer model (FALLBACK)
       const issuers = await Issuer.find({ isin: { $in: isins } })
         .select('isin company sector rating')
         .lean();
       
+      // Build issuer map - MasterRating as primary source
+      masterRatings.forEach(mr => {
+        issuerMap[mr.isin] = {
+          company: mr.issuerName,  // Use MasterRating issuerName as primary
+          rating: mr.rating || mr.metadata?.rating,
+          ratingGroup: mr.ratingGroup || mr.metadata?.ratingGroup,
+          sector: null,  // Will be filled from Issuer model if available
+        };
+      });
+      
+      // Merge with Issuer data (only fill missing fields, don't override)
       issuers.forEach(issuer => {
-        issuerMap[issuer.isin] = issuer;
+        if (!issuerMap[issuer.isin]) {
+          // If not in MasterRating, use Issuer data
+          issuerMap[issuer.isin] = {
+            company: issuer.company,
+            sector: issuer.sector,
+            rating: issuer.rating,
+            ratingGroup: null,
+          };
+        } else {
+          // If in MasterRating, only add sector from Issuer (don't override name or rating)
+          issuerMap[issuer.isin].sector = issuer.sector;
+        }
       });
     }
 
@@ -525,6 +567,7 @@ router.get('/investor-data', async (req, res) => {
           ? new Date(item.schemeId.reportDate).toLocaleDateString()
           : '',
         rating: issuerInfo.rating || item.rating || 'N/A',
+        ratingGroup: issuerInfo.ratingGroup || null,
         sector: issuerInfo.sector || item.sector || 'N/A',
         instrumentType: item.instrumentType || 'N/A',
         pct_to_nav: item.navPercent || 0,
@@ -549,25 +592,61 @@ router.get('/investor-data', async (req, res) => {
 router.get('/investor-data/issuers', async (req, res) => {
   try {
     const search = req.query.search || '';
-    const filter = {};
+    const searchRegex = search.trim() 
+      ? { $regex: escapeRegex(search.trim()), $options: 'i' }
+      : null;
     
-    if (search.trim()) {
-      filter.company = { $regex: escapeRegex(search.trim()), $options: 'i' };
-    }
+    // Get issuers from both models - prioritize MasterRating
+    const [issuersFromRating, issuersFromIssuer] = await Promise.all([
+      MasterRating.find(searchRegex ? { issuerName: searchRegex } : {})
+        .select('issuerName')
+        .sort({ issuerName: 1 })
+        .limit(20)
+        .lean(),
+      Issuer.find(searchRegex ? { company: searchRegex } : {})
+        .select('company')
+        .sort({ company: 1 })
+        .limit(20)
+        .lean()
+    ]);
     
-    // Get issuers from the master list (Issuer model)
-    const issuers = await Issuer.find(filter)
-      .select('company')
-      .sort({ company: 1 })
-      .limit(20)
-      .lean();
+    // Combine with MasterRating first (primary source), then add from Issuer
+    const namesFromRating = issuersFromRating
+      .map(issuer => issuer.issuerName)
+      .filter(name => name && name.trim());
     
-    // Extract company names
-    const issuerNames = issuers
+    const namesFromIssuer = issuersFromIssuer
       .map(issuer => issuer.company)
-      .filter(company => company && company.trim());
+      .filter(name => name && name.trim());
+    
+    // Deduplicate (case-insensitive) - MasterRating names take priority
+    const seenNames = new Set();
+    const uniqueNames = [];
+    
+    // Add MasterRating names first
+    namesFromRating.forEach(name => {
+      const lowerName = name.toLowerCase();
+      if (!seenNames.has(lowerName)) {
+        seenNames.add(lowerName);
+        uniqueNames.push(name);
+      }
+    });
+    
+    // Add Issuer names only if not already present
+    namesFromIssuer.forEach(name => {
+      const lowerName = name.toLowerCase();
+      if (!seenNames.has(lowerName)) {
+        seenNames.add(lowerName);
+        uniqueNames.push(name);
+      }
+    });
+    
+    // Sort and limit
+    const finalNames = uniqueNames
+      .sort((a, b) => a.localeCompare(b))
+      .slice(0, 20);
 
-    res.json({ issuers: issuerNames });
+    res.json({ issuers: finalNames });
   } catch (error) {
     console.error(error);
     res.status(500).json({ message: 'error', error: error.message });
