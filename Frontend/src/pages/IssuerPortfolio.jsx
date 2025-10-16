@@ -23,6 +23,10 @@ const buildApiUrl = (path) => {
   return `${API_BASE}${normalizedPath}`;
 };
 
+const FETCH_LIMIT = 500;
+const SCHEMES_PER_PAGE = 100;
+const SCHEME_CHART_SAMPLE = 12;
+
 const COLORS = [
   "#4c51bf",
   "#2b6cb0",
@@ -72,6 +76,12 @@ const percentageFormatter = new Intl.NumberFormat("en-IN", {
 
 const formatCurrency = (value) => currencyFormatter.format(value ?? 0);
 const formatCompactCurrency = (value) => compactCurrencyFormatter.format(value ?? 0);
+const formatQuantity = (value) => {
+  if (value === null || value === undefined) return "0";
+  const num = Number(value);
+  if (!Number.isFinite(num)) return "0";
+  return num.toLocaleString("en-IN");
+};
 
 const parseNumber = (value) => {
   if (value === null || value === undefined) return 0;
@@ -86,9 +96,9 @@ export default function IssuerPortfolio() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [search, setSearch] = useState("");
-  const [selectedIssuer, setSelectedIssuer] = useState(null);
-  const [issuerQuery, setIssuerQuery] = useState("");
-
+  const [schemeQuery, setSchemeQuery] = useState("");
+  const [selectedScheme, setSelectedScheme] = useState(null);
+  const [schemePage, setSchemePage] = useState(1);
   useEffect(() => {
     let active = true;
     const controller = new AbortController();
@@ -98,47 +108,57 @@ export default function IssuerPortfolio() {
         setLoading(true);
         setError(null);
 
-        const params = new URLSearchParams({
-          page: "1",
-          limit: "500",
-          hideIncomplete: "0",
-        });
-
         const token = localStorage.getItem("token");
-        let urlString = buildApiUrl("/imports");
-        try {
-          const url = new URL(urlString);
-          params.forEach((value, key) => url.searchParams.set(key, value));
-          urlString = url.toString();
-        } catch {
-          const connector = urlString.includes("?") ? "&" : "?";
-          urlString = `${urlString}${connector}${params.toString()}`;
+        const allHoldings = [];
+        let page = 1;
+        let totalPages = 1;
+
+        while (page <= totalPages) {
+          const params = new URLSearchParams({
+            page: String(page),
+            limit: String(FETCH_LIMIT),
+            hideIncomplete: "0",
+          });
+
+          let urlString = buildApiUrl("/imports");
+          try {
+            const url = new URL(urlString);
+            params.forEach((value, key) => url.searchParams.set(key, value));
+            urlString = url.toString();
+          } catch {
+            const connector = urlString.includes("?") ? "&" : "?";
+            urlString = `${urlString}${connector}${params.toString()}`;
+          }
+
+          const response = await fetch(urlString, {
+            signal: controller.signal,
+            headers: {
+              Accept: "application/json",
+              ...(token ? { Authorization: `Bearer ${token}` } : {}),
+            },
+          });
+
+          if (response.status === 401) {
+            localStorage.removeItem("token");
+            window.location.replace("/login");
+            return;
+          }
+
+          if (!response.ok) {
+            const message = await response.text();
+            throw new Error(message || `Failed to fetch holdings (${response.status})`);
+          }
+
+          const payload = await response.json();
+          const items = Array.isArray(payload.items) ? payload.items : [];
+          allHoldings.push(...items);
+
+          totalPages = payload.totalPages || 1;
+          page += 1;
         }
 
-        const response = await fetch(urlString, {
-          signal: controller.signal,
-          headers: {
-            Accept: "application/json",
-            ...(token ? { Authorization: `Bearer ${token}` } : {}),
-          },
-        });
-
-        if (response.status === 401) {
-          localStorage.removeItem("token");
-          window.location.replace("/login");
-          return;
-        }
-
-        if (!response.ok) {
-          const message = await response.text();
-          throw new Error(message || `Failed to fetch holdings (${response.status})`);
-        }
-
-        const payload = await response.json();
         if (!active) return;
-
-        const items = Array.isArray(payload.items) ? payload.items : [];
-        setHoldings(items);
+        setHoldings(allHoldings);
       } catch (err) {
         if (err.name === "AbortError") return;
         console.error("Mutual fund holdings fetch error:", err);
@@ -158,182 +178,172 @@ export default function IssuerPortfolio() {
     };
   }, []);
 
+  useEffect(() => {
+    setSchemePage(1);
+  }, [schemeQuery]);
+
   const filteredHoldings = useMemo(() => {
     const term = search.trim().toLowerCase();
     if (!term) return holdings;
     return holdings.filter((item) => {
-      const instrument = String(item.instrument_name || "").toLowerCase();
       const scheme = String(item.scheme_name || "").toLowerCase();
+      const instrument = String(item.instrument_name || "").toLowerCase();
       const isin = String(item.isin || "").toLowerCase();
       const rating = String(item.rating || "").toLowerCase();
       const issuer = String(item.issuer || "").toLowerCase();
       return (
-        instrument.includes(term) ||
         scheme.includes(term) ||
+        instrument.includes(term) ||
         isin.includes(term) ||
         rating.includes(term) ||
         issuer.includes(term)
       );
     });
   }, [holdings, search]);
-
-  const summary = useMemo(() => {
-    if (!filteredHoldings.length) {
-      return {
-        holdingsCount: 0,
-        schemesCount: 0,
-        totalMarketValue: 0,
-        avgPctNav: null,
-      };
-    }
-
-    const totals = filteredHoldings.reduce(
-      (acc, item) => {
-        const mv = parseNumber(item.market_value);
-        acc.marketValue += mv;
-
-        const pctNav =
-          parseNumber(item.pct_to_nav) ||
-          parseNumber(item.pct_to_NAV) ||
-          parseNumber(item.navPercent);
-        if (pctNav) {
-          acc.pctNavSum += pctNav;
-          acc.pctNavCount += 1;
-        }
-
-        if (item.scheme_name) acc.schemes.add(item.scheme_name);
-        return acc;
-      },
-      { marketValue: 0, pctNavSum: 0, pctNavCount: 0, schemes: new Set() }
-    );
-
-    return {
-      holdingsCount: filteredHoldings.length,
-      schemesCount: totals.schemes.size,
-      totalMarketValue: totals.marketValue,
-      avgPctNav: totals.pctNavCount > 0 ? totals.pctNavSum / totals.pctNavCount : null,
-    };
-  }, [filteredHoldings]);
-
-  const issuerSummaries = useMemo(() => {
+  const schemeSummaries = useMemo(() => {
     if (!filteredHoldings.length) return [];
 
     const bucket = new Map();
 
     filteredHoldings.forEach((item) => {
-      const issuerName = String(item.issuer || "").trim() || "Unattributed Issuer";
+      const schemeName = String(item.scheme_name || "").trim() || "Unnamed Scheme";
       const mv = parseNumber(item.market_value);
+      const quantity = parseNumber(item.quantity);
       const pctNav =
         parseNumber(item.pct_to_nav) ||
         parseNumber(item.pct_to_NAV) ||
         parseNumber(item.navPercent);
 
-      if (!bucket.has(issuerName)) {
-        bucket.set(issuerName, {
-          issuer: issuerName,
+      if (!bucket.has(schemeName)) {
+        bucket.set(schemeName, {
+          scheme: schemeName,
           holdings: [],
           totalMarketValue: 0,
+          totalQuantity: 0,
           pctNavSum: 0,
           pctNavCount: 0,
-          schemes: new Set(),
         });
       }
 
-      const entry = bucket.get(issuerName);
+      const entry = bucket.get(schemeName);
       entry.holdings.push(item);
       entry.totalMarketValue += mv;
+      entry.totalQuantity += quantity;
       if (pctNav) {
         entry.pctNavSum += pctNav;
         entry.pctNavCount += 1;
-      }
-      if (item.scheme_name) {
-        entry.schemes.add(item.scheme_name);
       }
     });
 
     return Array.from(bucket.values())
       .map((entry) => ({
-        issuer: entry.issuer,
+        scheme: entry.scheme,
         holdings: entry.holdings,
         totalMarketValue: entry.totalMarketValue,
+        totalQuantity: entry.totalQuantity,
+        averagePctNav: entry.pctNavCount ? entry.pctNavSum / entry.pctNavCount : null,
         holdingsCount: entry.holdings.length,
-        averagePctNav: entry.pctNavCount > 0 ? entry.pctNavSum / entry.pctNavCount : null,
-        schemeCount: entry.schemes.size,
       }))
       .sort((a, b) => b.totalMarketValue - a.totalMarketValue);
   }, [filteredHoldings]);
 
-  const issuerMeta = useMemo(() => {
-    if (!issuerSummaries.length) {
+  const schemeMeta = useMemo(() => {
+    if (!schemeSummaries.length) {
       return {
-        totalIssuers: 0,
+        totalSchemes: 0,
         totalMarketValue: 0,
-        topIssuer: null,
+        totalQuantity: 0,
+        holdingsCount: filteredHoldings.length,
+        topScheme: null,
       };
     }
 
-    const totalMarketValue = issuerSummaries.reduce(
+    const totalMarketValue = schemeSummaries.reduce(
       (acc, entry) => acc + entry.totalMarketValue,
+      0
+    );
+    const totalQuantity = schemeSummaries.reduce(
+      (acc, entry) => acc + entry.totalQuantity,
       0
     );
 
     return {
-      totalIssuers: issuerSummaries.length,
+      totalSchemes: schemeSummaries.length,
       totalMarketValue,
-      topIssuer: issuerSummaries[0] || null,
+      totalQuantity,
+      holdingsCount: filteredHoldings.length,
+      topScheme: schemeSummaries[0] || null,
     };
-  }, [issuerSummaries]);
+  }, [schemeSummaries, filteredHoldings.length]);
 
-  const issuerExposureData = useMemo(
+  const schemeExposureData = useMemo(
     () =>
-      issuerSummaries.slice(0, 12).map((entry, index) => ({
-        issuer: entry.issuer,
+      schemeSummaries.slice(0, SCHEME_CHART_SAMPLE).map((entry, index) => ({
+        scheme: entry.scheme,
         marketValue: Number(entry.totalMarketValue.toFixed(2)),
         color: COLORS[index % COLORS.length],
       })),
-    [issuerSummaries]
+    [schemeSummaries]
   );
 
-  const issuerList = useMemo(() => {
-    const term = issuerQuery.trim().toLowerCase();
-    if (!term) return issuerSummaries;
-    return issuerSummaries.filter((entry) => entry.issuer.toLowerCase().includes(term));
-  }, [issuerQuery, issuerSummaries]);
+  const schemeList = useMemo(() => {
+    const term = schemeQuery.trim().toLowerCase();
+    if (!term) return schemeSummaries;
+    return schemeSummaries.filter((entry) => entry.scheme.toLowerCase().includes(term));
+  }, [schemeQuery, schemeSummaries]);
 
   useEffect(() => {
-    if (!issuerSummaries.length) {
-      setSelectedIssuer(null);
+    if (!schemeList.length) {
+      setSelectedScheme(null);
       return;
     }
 
-    setSelectedIssuer((prev) => {
-      if (prev && issuerSummaries.some((entry) => entry.issuer === prev)) {
+    setSelectedScheme((prev) => {
+      if (prev && schemeList.some((entry) => entry.scheme === prev)) {
         return prev;
       }
-      return issuerSummaries[0].issuer;
+      return schemeList[0].scheme;
     });
-  }, [issuerSummaries]);
+  }, [schemeList]);
 
-  const activeIssuer = useMemo(() => {
-    if (!selectedIssuer) return null;
-    const entry = issuerSummaries.find((issuer) => issuer.issuer === selectedIssuer);
+  useEffect(() => {
+    const totalPages = Math.max(1, Math.ceil(schemeList.length / SCHEMES_PER_PAGE));
+    setSchemePage((prev) => Math.min(prev, totalPages));
+  }, [schemeList]);
+
+  const totalSchemePages = useMemo(
+    () => Math.max(1, Math.ceil(schemeList.length / SCHEMES_PER_PAGE)),
+    [schemeList]
+  );
+
+  const paginatedSchemes = useMemo(() => {
+    const start = (schemePage - 1) * SCHEMES_PER_PAGE;
+    return schemeList.slice(start, start + SCHEMES_PER_PAGE);
+  }, [schemeList, schemePage]);
+
+  const schemeTotal = schemeList.length;
+  const schemeStart = schemeTotal ? (schemePage - 1) * SCHEMES_PER_PAGE + 1 : 0;
+  const schemeEnd = schemeTotal ? Math.min(schemePage * SCHEMES_PER_PAGE, schemeTotal) : 0;
+
+  const activeScheme = useMemo(() => {
+    if (!selectedScheme) return null;
+    const entry = schemeSummaries.find((scheme) => scheme.scheme === selectedScheme);
     if (!entry) return null;
 
     const totalValue = entry.totalMarketValue || 0;
-
     const instrumentMap = new Map();
     const ratingMap = new Map();
-    const schemeMap = new Map();
+    const issuerMap = new Map();
 
     entry.holdings.forEach((holding) => {
       const value = parseNumber(holding.market_value);
       const instrument = holding.instrumentType || "Unclassified";
       const rating = holding.rating || "Unrated";
-      const scheme = holding.scheme_name || "Unnamed Scheme";
+      const issuer = holding.issuer || "Unattributed Issuer";
 
       instrumentMap.set(instrument, (instrumentMap.get(instrument) || 0) + value);
       ratingMap.set(rating, (ratingMap.get(rating) || 0) + 1);
-      schemeMap.set(scheme, (schemeMap.get(scheme) || 0) + value);
+      issuerMap.set(issuer, (issuerMap.get(issuer) || 0) + value);
     });
 
     const instrumentMix = Array.from(instrumentMap.entries())
@@ -353,28 +363,28 @@ export default function IssuerPortfolio() {
       .sort((a, b) => b.count - a.count)
       .slice(0, 12);
 
-    const schemeBreakdown = Array.from(schemeMap.entries())
-      .map(([scheme, value]) => ({
-        scheme,
+    const issuerBreakdown = Array.from(issuerMap.entries())
+      .map(([issuer, value]) => ({
+        issuer,
         value,
         percentage: totalValue > 0 ? (value / totalValue) * 100 : 0,
       }))
       .sort((a, b) => b.value - a.value)
-      .slice(0, 8);
+      .slice(0, 15);
 
-    const topHoldings = [...entry.holdings]
-      .sort((a, b) => parseNumber(b.market_value) - parseNumber(a.market_value))
-      .slice(0, 25);
+    const holdingsSorted = [...entry.holdings].sort(
+      (a, b) => parseNumber(b.market_value) - parseNumber(a.market_value)
+    );
 
     return {
       ...entry,
+      uniqueIssuers: issuerMap.size,
       instrumentMix,
       ratingBreakdown,
-      schemeBreakdown,
-      topHoldings,
+      issuerBreakdown,
+      holdingsSorted,
     };
-  }, [issuerSummaries, selectedIssuer]);
-
+  }, [selectedScheme, schemeSummaries]);
   return (
     <div className="issuer-page">
       <div className="issuer-shell">
@@ -382,18 +392,17 @@ export default function IssuerPortfolio() {
           <div className="issuer-hero__layout">
             <div className="issuer-hero__intro">
               <span className="issuer-tag">Mutual Funds</span>
-              <h1 className="issuer-title">Issuer Exposure Dashboard</h1>
+              <h1 className="issuer-title">Scheme Exposure Dashboard</h1>
               <p className="issuer-subtitle">
-                Explore holdings grouped by issuer, understand concentration risks, and dig into
-                scheme level contributions. Use the search box to refine the universe by scheme,
-                instrument, ISIN, rating, or issuer name.
+                Consolidated look at holdings grouped by scheme name. Filter by scheme, instrument,
+                ISIN, rating, or issuer to analyse market value concentration and quantity exposure.
               </p>
             </div>
             <div className="issuer-hero__controls">
               <input
                 value={search}
                 onChange={(event) => setSearch(event.target.value)}
-                placeholder="Search issuer, scheme, instrument, ISIN, or rating"
+                placeholder="Search scheme, instrument, ISIN, rating, or issuer"
                 className="issuer-input"
               />
               <span className="issuer-chip">{filteredHoldings.length} holdings</span>
@@ -402,73 +411,80 @@ export default function IssuerPortfolio() {
 
           <ul className="issuer-stats">
             <li className="issuer-stat">
-              <p className="issuer-stat__label">Unique Issuers</p>
+              <p className="issuer-stat__label">Unique Schemes</p>
               <p className="issuer-stat__value">
-                {issuerMeta.totalIssuers.toLocaleString("en-IN")}
+                {schemeMeta.totalSchemes.toLocaleString("en-IN")}
               </p>
-              <span className="issuer-stat__hint">In the current filtered view</span>
+              <span className="issuer-stat__hint">Represented in the current selection</span>
             </li>
             <li className="issuer-stat">
               <p className="issuer-stat__label">Holdings in Scope</p>
               <p className="issuer-stat__value">
-                {summary.holdingsCount.toLocaleString("en-IN")}
+                {schemeMeta.holdingsCount.toLocaleString("en-IN")}
               </p>
-              <span className="issuer-stat__hint">Individual rows contributing to issuer totals</span>
+              <span className="issuer-stat__hint">Rows contributing to scheme totals</span>
             </li>
             <li className="issuer-stat">
               <p className="issuer-stat__label">Market Value (Rs Lacs)</p>
-              <p className="issuer-stat__value">{formatCurrency(summary.totalMarketValue)}</p>
-              <span className="issuer-stat__hint">Aggregated across the filtered holdings</span>
+              <p className="issuer-stat__value">{formatCurrency(schemeMeta.totalMarketValue)}</p>
+              <span className="issuer-stat__hint">Aggregated across all schemes</span>
             </li>
             <li className="issuer-stat">
-              <p className="issuer-stat__label">Top Issuer Exposure</p>
+              <p className="issuer-stat__label">Aggregate Quantity</p>
+              <p className="issuer-stat__value">{formatQuantity(schemeMeta.totalQuantity)}</p>
+              <span className="issuer-stat__hint">Summed across holdings</span>
+            </li>
+            <li className="issuer-stat">
+              <p className="issuer-stat__label">Top Scheme Exposure</p>
               <p className="issuer-stat__value">
-                {issuerMeta.topIssuer ? issuerMeta.topIssuer.issuer : "Awaiting selection"}
+                {schemeMeta.topScheme ? schemeMeta.topScheme.scheme : "Awaiting data"}
               </p>
               <span className="issuer-stat__hint">
-                {issuerMeta.topIssuer
-                  ? formatCurrency(issuerMeta.topIssuer.totalMarketValue)
-                  : "No issuer data available"}
+                {schemeMeta.topScheme
+                  ? formatCurrency(schemeMeta.topScheme.totalMarketValue)
+                  : "No scheme data available"}
               </span>
             </li>
           </ul>
         </header>
 
         {loading ? (
-          <div className="issuer-card issuer-card--message">Loading issuer dashboardï¿½</div>
+          <div className="issuer-card issuer-card--message">Loading scheme dashboard…</div>
         ) : error ? (
           <div className="issuer-card issuer-card--message issuer-card--error">{error}</div>
-        ) : filteredHoldings.length === 0 ? (
+        ) : schemeSummaries.length === 0 ? (
           <div className="issuer-card issuer-card--message">
-            No holdings match the current search.
+            No schemes match the current search.
           </div>
         ) : (
-          <div className="issuer-content">
+          <>
             <section className="issuer-card">
               <div className="issuer-card__header">
                 <div>
-                  <h2>Issuer Exposure Overview</h2>
-                  <p>Largest issuers ranked by market value. Click a bar to focus the detail panel.</p>
+                  <h2>Scheme Exposure Overview</h2>
+                  <p>
+                    Largest schemes ranked by market value. Click a bar to focus the detail panel.
+                  </p>
                 </div>
                 <span className="issuer-chip issuer-chip--light">
-                  Top {issuerExposureData.length.toLocaleString("en-IN")} issuers
+                  Top {schemeExposureData.length.toLocaleString("en-IN")} schemes
                 </span>
               </div>
               <div className="issuer-chart issuer-chart--bar">
-                {issuerExposureData.length === 0 ? (
-                  <div className="issuer-chart__empty">Not enough issuer data to render the chart.</div>
+                {schemeExposureData.length === 0 ? (
+                  <div className="issuer-chart__empty">Not enough data to render chart.</div>
                 ) : (
                   <ResponsiveContainer width="100%" height="100%">
                     <BarChart
-                      data={issuerExposureData}
-                      margin={{ top: 12, right: 24, left: 0, bottom: 36 }}
+                      data={schemeExposureData}
+                      margin={{ top: 12, right: 24, left: 12, bottom: 40 }}
                     >
                       <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
                       <XAxis
-                        dataKey="issuer"
+                        dataKey="scheme"
                         angle={-20}
                         textAnchor="end"
-                        height={60}
+                        height={70}
                         axisLine={false}
                         tickLine={false}
                       />
@@ -480,16 +496,16 @@ export default function IssuerPortfolio() {
                       <RechartsTooltip
                         formatter={(value, _label, payload) => [
                           formatCurrency(value),
-                          payload?.payload?.issuer,
+                          payload?.payload?.scheme,
                         ]}
                       />
                       <Bar dataKey="marketValue" radius={[10, 10, 0, 0]}>
-                        {issuerExposureData.map((entry) => (
+                        {schemeExposureData.map((entry) => (
                           <Cell
-                            key={entry.issuer}
+                            key={entry.scheme}
                             fill={entry.color}
                             style={{ cursor: "pointer" }}
-                            onClick={() => setSelectedIssuer(entry.issuer)}
+                            onClick={() => setSelectedScheme(entry.scheme)}
                           />
                         ))}
                       </Bar>
@@ -503,65 +519,103 @@ export default function IssuerPortfolio() {
               <section className="issuer-card issuer-card--sidebar">
                 <div className="issuer-card__header issuer-card__header--stacked">
                   <div>
-                    <h2>Issuer Leaderboard</h2>
-                    <p>Select an issuer to inspect concentration, schemes, and holdings.</p>
+                    <h2>Scheme Directory</h2>
+                    <p>Select a scheme to inspect holdings and issuer concentration.</p>
                   </div>
                   <input
-                    value={issuerQuery}
-                    onChange={(event) => setIssuerQuery(event.target.value)}
-                    placeholder="Filter issuer name"
+                    value={schemeQuery}
+                    onChange={(event) => setSchemeQuery(event.target.value)}
+                    placeholder="Filter scheme name"
                     className="issuer-input issuer-input--subtle"
                   />
                 </div>
 
                 <div className="issuer-leaderboard">
-                  {issuerList.length === 0 ? (
-                    <div className="issuer-leaderboard__empty">No issuer matches the filter.</div>
+                  {paginatedSchemes.length === 0 ? (
+                    <div className="issuer-leaderboard__empty">No scheme matches the filter.</div>
                   ) : (
-                    issuerList.map((entry) => {
+                    paginatedSchemes.map((entry) => {
                       const share =
-                        issuerMeta.totalMarketValue > 0
-                          ? (entry.totalMarketValue / issuerMeta.totalMarketValue) * 100
+                        schemeMeta.totalMarketValue > 0
+                          ? (entry.totalMarketValue / schemeMeta.totalMarketValue) * 100
                           : 0;
-                      const isActive = entry.issuer === selectedIssuer;
+                      const isActive = entry.scheme === selectedScheme;
+                      const avgPctNavText =
+                        entry.averagePctNav !== null
+                          ? `${percentageFormatter.format(entry.averagePctNav)}%`
+                          : "NA";
+                      const shareText =
+                        schemeMeta.totalMarketValue > 0
+                          ? `${percentageFormatter.format(share)}% of MV`
+                          : "—";
 
                       return (
                         <button
-                          key={entry.issuer}
+                          key={entry.scheme}
                           type="button"
-                          onClick={() => setSelectedIssuer(entry.issuer)}
+                          onClick={() => setSelectedScheme(entry.scheme)}
                           className={`issuer-leaderboard__item${
                             isActive ? " issuer-leaderboard__item--active" : ""
                           }`}
                         >
                           <div className="issuer-leaderboard__heading">
-                            <span className="issuer-leaderboard__name">{entry.issuer}</span>
+                            <span className="issuer-leaderboard__name">{entry.scheme}</span>
                             <span className="issuer-leaderboard__value">
                               {formatCurrency(entry.totalMarketValue)}
                             </span>
                           </div>
                           <div className="issuer-leaderboard__meta">
                             <span>
-                              {entry.schemeCount.toLocaleString("en-IN")} schemes ï¿½ {" "}
-                              {entry.holdingsCount.toLocaleString("en-IN")} holdings
+                              {entry.holdingsCount.toLocaleString("en-IN")} holdings · {avgPctNavText}
                             </span>
-                            <span>{percentageFormatter.format(share)}% of filtered MV</span>
+                            <span>{shareText}</span>
+                          </div>
+                          <div className="issuer-leaderboard__meta">
+                            <span>Total Quantity</span>
+                            <span>{formatQuantity(entry.totalQuantity)}</span>
                           </div>
                         </button>
                       );
                     })
                   )}
                 </div>
+
+                {schemeList.length > SCHEMES_PER_PAGE ? (
+                  <div className="issuer-pagination">
+                    <span className="issuer-pagination__info">
+                      Showing {schemeStart}-{schemeEnd} of {schemeList.length} schemes (Page {schemePage} of {totalSchemePages})
+                    </span>
+                    <div className="issuer-pagination__controls">
+                      <button
+                        type="button"
+                        onClick={() => setSchemePage((prev) => Math.max(1, prev - 1))}
+                        disabled={schemePage === 1}
+                      >
+                        Previous
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setSchemePage((prev) => Math.min(totalSchemePages, prev + 1))}
+                        disabled={schemePage === totalSchemePages}
+                      >
+                        Next
+                      </button>
+                    </div>
+                  </div>
+                ) : null}
               </section>
 
               <section className="issuer-card issuer-card--detail">
-                {activeIssuer ? (
+                {activeScheme ? (
                   <>
                     <div className="issuer-card__header">
                       <div>
-                        <span className="issuer-tag issuer-tag--accent">Selected Issuer</span>
-                        <h2>{activeIssuer.issuer}</h2>
-                        <p>Aggregate exposure across all holdings currently in scope.</p>
+                        <span className="issuer-tag issuer-tag--accent">Selected Scheme</span>
+                        <h2>{activeScheme.scheme}</h2>
+                        <p>
+                          Consolidated exposure overview for the selected scheme, including issuer
+                          mix, ratings, and holdings breakdown.
+                        </p>
                       </div>
                     </div>
 
@@ -569,34 +623,45 @@ export default function IssuerPortfolio() {
                       <div className="issuer-detail-metric">
                         <p className="issuer-detail-metric__label">Market Value (Rs Lacs)</p>
                         <p className="issuer-detail-metric__value">
-                          {formatCurrency(activeIssuer.totalMarketValue)}
+                          {formatCurrency(activeScheme.totalMarketValue)}
                         </p>
                         <span className="issuer-detail-metric__hint">
-                          Across all holdings for this issuer
+                          Aggregated across scheme holdings
                         </span>
                       </div>
                       <div className="issuer-detail-metric">
                         <p className="issuer-detail-metric__label">Holdings Count</p>
                         <p className="issuer-detail-metric__value">
-                          {activeIssuer.holdingsCount.toLocaleString("en-IN")}
+                          {activeScheme.holdingsCount.toLocaleString("en-IN")}
                         </p>
                         <span className="issuer-detail-metric__hint">
-                          Rows contributing to this issuer
+                          Rows contributing to this scheme
                         </span>
                       </div>
                       <div className="issuer-detail-metric">
-                        <p className="issuer-detail-metric__label">Unique Schemes</p>
+                        <p className="issuer-detail-metric__label">Unique Issuers</p>
                         <p className="issuer-detail-metric__value">
-                          {activeIssuer.schemeCount.toLocaleString("en-IN")}
+                          {activeScheme.uniqueIssuers.toLocaleString("en-IN")}
                         </p>
-                        <span className="issuer-detail-metric__hint">Distinct scheme exposures</span>
+                        <span className="issuer-detail-metric__hint">
+                          Issuers present within the scheme
+                        </span>
+                      </div>
+                      <div className="issuer-detail-metric">
+                        <p className="issuer-detail-metric__label">Total Quantity</p>
+                        <p className="issuer-detail-metric__value">
+                          {formatQuantity(activeScheme.totalQuantity)}
+                        </p>
+                        <span className="issuer-detail-metric__hint">
+                          Sum of reported quantities
+                        </span>
                       </div>
                       <div className="issuer-detail-metric">
                         <p className="issuer-detail-metric__label">Average % to NAV</p>
                         <p className="issuer-detail-metric__value">
-                          {activeIssuer.averagePctNav === null
-                            ? "NA"
-                            : `${percentageFormatter.format(activeIssuer.averagePctNav)}%`}
+                          {activeScheme.averagePctNav !== null
+                            ? `${percentageFormatter.format(activeScheme.averagePctNav)}%`
+                            : "NA"}
                         </p>
                         <span className="issuer-detail-metric__hint">
                           Across holdings with NAV data
@@ -611,7 +676,7 @@ export default function IssuerPortfolio() {
                           <p>Share of market value by instrument classification.</p>
                         </div>
                         <div className="issuer-chart">
-                          {activeIssuer.instrumentMix.length === 0 ? (
+                          {activeScheme.instrumentMix.length === 0 ? (
                             <div className="issuer-chart__empty">
                               Not enough data to render chart.
                             </div>
@@ -619,14 +684,14 @@ export default function IssuerPortfolio() {
                             <ResponsiveContainer width="100%" height="100%">
                               <PieChart>
                                 <Pie
-                                  data={activeIssuer.instrumentMix}
+                                  data={activeScheme.instrumentMix}
                                   dataKey="value"
                                   nameKey="name"
                                   innerRadius="45%"
                                   outerRadius="68%"
                                   paddingAngle={1.6}
                                 >
-                                  {activeIssuer.instrumentMix.map((segment) => (
+                                  {activeScheme.instrumentMix.map((segment) => (
                                     <Cell key={segment.name} fill={segment.color} />
                                   ))}
                                 </Pie>
@@ -649,15 +714,15 @@ export default function IssuerPortfolio() {
                           <p>Count of holdings by credit rating (top 12 buckets).</p>
                         </div>
                         <div className="issuer-chart">
-                          {activeIssuer.ratingBreakdown.length === 0 ? (
+                          {activeScheme.ratingBreakdown.length === 0 ? (
                             <div className="issuer-chart__empty">
-                              Ratings were unavailable for this issuer.
+                              Ratings were unavailable for this scheme.
                             </div>
                           ) : (
                             <ResponsiveContainer width="100%" height="100%">
                               <BarChart
-                                data={activeIssuer.ratingBreakdown}
-                                margin={{ top: 12, right: 24, left: 0, bottom: 24 }}
+                                data={activeScheme.ratingBreakdown}
+                                margin={{ top: 12, right: 24, left: 12, bottom: 24 }}
                               >
                                 <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
                                 <XAxis
@@ -671,7 +736,7 @@ export default function IssuerPortfolio() {
                                 <YAxis allowDecimals={false} axisLine={false} tickLine={false} />
                                 <RechartsTooltip />
                                 <Bar dataKey="count" radius={[8, 8, 0, 0]}>
-                                  {activeIssuer.ratingBreakdown.map((entry) => (
+                                  {activeScheme.ratingBreakdown.map((entry) => (
                                     <Cell key={entry.rating} fill={entry.color} />
                                   ))}
                                 </Bar>
@@ -684,33 +749,33 @@ export default function IssuerPortfolio() {
 
                     <div className="issuer-card__section">
                       <div className="issuer-card__header issuer-card__header--compact">
-                        <h3>Scheme Contributions</h3>
-                        <p>Top schemes ranked by market value within this issuer.</p>
+                        <h3>Issuer Exposures</h3>
+                        <p>Top issuers ranked by market value within this scheme.</p>
                       </div>
                       <div className="issuer-scheme-list">
-                        {activeIssuer.schemeBreakdown.length === 0 ? (
+                        {activeScheme.issuerBreakdown.length === 0 ? (
                           <div className="issuer-scheme-list__empty">
-                            No scheme level data available.
+                            No issuer level data available.
                           </div>
                         ) : (
-                          activeIssuer.schemeBreakdown.map((scheme) => (
-                            <div key={scheme.scheme} className="issuer-scheme">
+                          activeScheme.issuerBreakdown.map((issuer) => (
+                            <div key={issuer.issuer} className="issuer-scheme">
                               <div className="issuer-scheme__header">
-                                <span className="issuer-scheme__name">{scheme.scheme}</span>
+                                <span className="issuer-scheme__name">{issuer.issuer}</span>
                                 <span className="issuer-scheme__value">
-                                  {formatCurrency(scheme.value)}
+                                  {formatCurrency(issuer.value)}
                                 </span>
                               </div>
                               <div className="issuer-progress">
                                 <div
                                   className="issuer-progress__fill"
                                   style={{
-                                    width: `${Math.min(100, Math.max(2, scheme.percentage))}%`,
+                                    width: `${Math.min(100, Math.max(2, issuer.percentage))}%`,
                                   }}
                                 />
                               </div>
                               <span className="issuer-scheme__hint">
-                                {percentageFormatter.format(scheme.percentage)}% of issuer exposure
+                                {percentageFormatter.format(issuer.percentage)}% of scheme exposure
                               </span>
                             </div>
                           ))
@@ -721,7 +786,7 @@ export default function IssuerPortfolio() {
                     <div className="issuer-card__section">
                       <div className="issuer-card__header issuer-card__header--compact">
                         <h3>Holdings Breakdown</h3>
-                        <p>Top 25 holdings by market value within the selected issuer.</p>
+                        <p>All holdings ordered by market value within the selected scheme.</p>
                       </div>
                       <div className="issuer-table__wrapper">
                         <table className="issuer-table">
@@ -738,7 +803,7 @@ export default function IssuerPortfolio() {
                             </tr>
                           </thead>
                           <tbody>
-                            {activeIssuer.topHoldings.map((holding) => {
+                            {activeScheme.holdingsSorted.map((holding) => {
                               const pctToNav =
                                 parseNumber(holding.pct_to_nav) ||
                                 parseNumber(holding.pct_to_NAV) ||
@@ -771,7 +836,7 @@ export default function IssuerPortfolio() {
                                     {pctToNav ? `${percentageFormatter.format(pctToNav)}%` : "N/A"}
                                   </td>
                                   <td className="align-right">
-                                    {parseNumber(holding.quantity).toLocaleString("en-IN")}
+                                    {formatQuantity(parseNumber(holding.quantity))}
                                   </td>
                                 </tr>
                               );
@@ -783,12 +848,12 @@ export default function IssuerPortfolio() {
                   </>
                 ) : (
                   <div className="issuer-placeholder">
-                    Select an issuer to view detailed analytics.
+                    Select a scheme to view detailed analytics.
                   </div>
                 )}
               </section>
             </div>
-          </div>
+          </>
         )}
       </div>
     </div>
