@@ -27,6 +27,7 @@ const FETCH_LIMIT = 100; // Reduced from 500 for faster initial load
 const SCHEMES_PER_PAGE = 100;
 const SCHEME_CHART_SAMPLE = 12;
 const MAX_PAGES_TO_FETCH = 20; // Limit total pages for performance
+const MAX_PAGES_WITH_SEARCH = 50; // Allow more pages when user is searching
 
 const COLORS = [
   "#4c51bf",
@@ -116,13 +117,27 @@ export default function IssuerPortfolio() {
         let page = 1;
         let totalPages = 1;
 
+        // Use higher limit when searching for specific data
+        const maxPages = search.trim() ? MAX_PAGES_WITH_SEARCH : MAX_PAGES_TO_FETCH;
+        
+        // Detect if search looks like an ISIN (12 alphanumeric characters)
+        const searchTerm = search.trim();
+        const isISINSearch = /^[A-Z]{2}[A-Z0-9]{9}[0-9]$/i.test(searchTerm);
+
         // Limit the number of pages to fetch for performance
-        while (page <= totalPages && page <= MAX_PAGES_TO_FETCH) {
+        while (page <= totalPages && page <= maxPages) {
           const params = new URLSearchParams({
             page: String(page),
             limit: String(FETCH_LIMIT),
             hideIncomplete: "0",
           });
+          
+          // Add server-side filtering for ISIN searches
+          if (isISINSearch) {
+            params.set('isin', searchTerm);
+          } else if (searchTerm) {
+            params.set('search', searchTerm);
+          }
 
           let urlString = buildApiUrl("/imports");
           try {
@@ -157,7 +172,8 @@ export default function IssuerPortfolio() {
           const items = Array.isArray(payload.items) ? payload.items : [];
           allHoldings.push(...items);
 
-          totalPages = Math.min(payload.totalPages || 1, MAX_PAGES_TO_FETCH);
+          const maxPages = search.trim() ? MAX_PAGES_WITH_SEARCH : MAX_PAGES_TO_FETCH;
+          totalPages = Math.min(payload.totalPages || 1, maxPages);
           
           // Update progress
           const progress = Math.round((page / totalPages) * 100);
@@ -188,7 +204,7 @@ export default function IssuerPortfolio() {
       active = false;
       controller.abort();
     };
-  }, []);
+  }, [search]); // Re-fetch when search changes to get all matching data
 
   useEffect(() => {
     setSchemePage(1);
@@ -196,7 +212,13 @@ export default function IssuerPortfolio() {
 
   const filteredHoldings = useMemo(() => {
     const term = search.trim().toLowerCase();
-    if (!term) return holdings;
+    // Check if it's an ISIN search (already filtered server-side)
+    const isISINSearch = /^[A-Z]{2}[A-Z0-9]{9}[0-9]$/i.test(term);
+    
+    // If empty search or ISIN search (already filtered server-side), return all holdings
+    if (!term || isISINSearch) return holdings;
+    
+    // Otherwise, apply client-side filtering for other searches
     return holdings.filter((item) => {
       const scheme = String(item.scheme_name || "").toLowerCase();
       const instrument = String(item.instrument_name || "").toLowerCase();
@@ -417,7 +439,11 @@ export default function IssuerPortfolio() {
                 placeholder="Search scheme, instrument, ISIN, rating, or issuer"
                 className="issuer-input"
               />
-              <span className="issuer-chip">{filteredHoldings.length} holdings</span>
+              <span className="issuer-chip">
+                {filteredHoldings.length} holdings
+                {search.trim() && /^[A-Z]{2}[A-Z0-9]{9}[0-9]$/i.test(search.trim()) && 
+                  ` • ISIN Search: ${schemeMeta.totalSchemes} schemes`}
+              </span>
             </div>
           </div>
 
