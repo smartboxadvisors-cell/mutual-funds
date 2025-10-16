@@ -1,490 +1,796 @@
-﻿import React, { useEffect, useMemo, useState } from 'react';
+﻿import React, { useEffect, useMemo, useState } from "react";
 import {
   ResponsiveContainer,
   PieChart,
   Pie,
-  BarChart,
-  Bar,
   Cell,
   Tooltip as RechartsTooltip,
   Legend,
+  BarChart,
+  Bar,
   CartesianGrid,
   XAxis,
   YAxis,
-} from 'recharts';
+} from "recharts";
 
-const API_BASE = import.meta.env?.VITE_API_URL || 'http://localhost:5000/api';
+import "./issuer-portfolio.css";
+
+const RAW_API_BASE = import.meta.env?.VITE_API_URL || "http://localhost:5000/api";
+const API_BASE = RAW_API_BASE.replace(/\/$/, "");
+
+const buildApiUrl = (path) => {
+  const normalizedPath = path.startsWith("/") ? path : `/${path}`;
+  return `${API_BASE}${normalizedPath}`;
+};
 
 const COLORS = [
-  '#4338ca',
-  '#2563eb',
-  '#0891b2',
-  '#0f766e',
-  '#ca8a04',
-  '#c2410c',
-  '#dc2626',
-  '#9333ea',
-  '#15803d',
-  '#7c3aed',
+  "#4c51bf",
+  "#2b6cb0",
+  "#2c7a7b",
+  "#38a169",
+  "#d69e2e",
+  "#dd6b20",
+  "#c05621",
+  "#9f7aea",
+  "#805ad5",
+  "#dd6b20",
 ];
 
-const currencyFormatter = new Intl.NumberFormat('en-IN', {
-  style: 'currency',
-  currency: 'INR',
+const SECONDARY_COLORS = [
+  "#60a5fa",
+  "#f97316",
+  "#34d399",
+  "#fbbf24",
+  "#a855f7",
+  "#f87171",
+  "#0ea5e9",
+  "#facc15",
+  "#22d3ee",
+  "#f472b6",
+];
+
+const currencyFormatter = new Intl.NumberFormat("en-IN", {
+  style: "currency",
+  currency: "INR",
+  minimumFractionDigits: 2,
+  maximumFractionDigits: 2,
+});
+
+const compactCurrencyFormatter = new Intl.NumberFormat("en-IN", {
+  style: "currency",
+  currency: "INR",
+  notation: "compact",
+  compactDisplay: "short",
+  minimumFractionDigits: 1,
+  maximumFractionDigits: 1,
+});
+
+const percentageFormatter = new Intl.NumberFormat("en-IN", {
   minimumFractionDigits: 2,
   maximumFractionDigits: 2,
 });
 
 const formatCurrency = (value) => currencyFormatter.format(value ?? 0);
-
-const formatDate = (value) => {
-  if (!value) return '-';
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return value;
-  return date.toLocaleDateString('en-GB');
-};
+const formatCompactCurrency = (value) => compactCurrencyFormatter.format(value ?? 0);
 
 const parseNumber = (value) => {
   if (value === null || value === undefined) return 0;
-  if (typeof value === 'number') return value;
-  const cleaned = String(value).replace(/[^0-9.+-]/g, '');
+  if (typeof value === "number") return Number.isFinite(value) ? value : 0;
+  const cleaned = String(value).replace(/[^0-9.+-]/g, "");
   const parsed = Number(cleaned);
   return Number.isFinite(parsed) ? parsed : 0;
 };
 
 export default function IssuerPortfolio() {
-  const [rows, setRows] = useState([]);
+  const [holdings, setHoldings] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
-  const [search, setSearch] = useState('');
+  const [search, setSearch] = useState("");
+  const [selectedIssuer, setSelectedIssuer] = useState(null);
+  const [issuerQuery, setIssuerQuery] = useState("");
 
   useEffect(() => {
-    let isMounted = true;
+    let active = true;
     const controller = new AbortController();
 
-    const fetchPortfolio = async () => {
+    const fetchHoldings = async () => {
       try {
         setLoading(true);
+        setError(null);
+
         const params = new URLSearchParams({
-          page: '1',
-          limit: '5000',
-          sort: 'tradeDate',
-          order: 'desc',
+          page: "1",
+          limit: "500",
+          hideIncomplete: "0",
         });
 
-        const token = localStorage.getItem('token');
-        const response = await fetch(`${API_BASE}/trading/transactions?${params.toString()}`, {
+        const token = localStorage.getItem("token");
+        let urlString = buildApiUrl("/imports");
+        try {
+          const url = new URL(urlString);
+          params.forEach((value, key) => url.searchParams.set(key, value));
+          urlString = url.toString();
+        } catch {
+          const connector = urlString.includes("?") ? "&" : "?";
+          urlString = `${urlString}${connector}${params.toString()}`;
+        }
+
+        const response = await fetch(urlString, {
           signal: controller.signal,
           headers: {
+            Accept: "application/json",
             ...(token ? { Authorization: `Bearer ${token}` } : {}),
           },
         });
 
+        if (response.status === 401) {
+          localStorage.removeItem("token");
+          window.location.replace("/login");
+          return;
+        }
+
         if (!response.ok) {
-          const text = await response.text();
-          throw new Error(text || `Server error: ${response.status}`);
+          const message = await response.text();
+          throw new Error(message || `Failed to fetch holdings (${response.status})`);
         }
 
         const payload = await response.json();
-        if (!isMounted) return;
-        setRows(payload.data || []);
-        setError(null);
+        if (!active) return;
+
+        const items = Array.isArray(payload.items) ? payload.items : [];
+        setHoldings(items);
       } catch (err) {
-        if (err.name === 'AbortError') return;
-        console.error('Issuer portfolio fetch error:', err);
-        if (isMounted) {
-          setError(err.message || 'Failed to load issuer portfolio');
-          setRows([]);
+        if (err.name === "AbortError") return;
+        console.error("Mutual fund holdings fetch error:", err);
+        if (active) {
+          setError(err.message || "Unable to load mutual fund holdings");
+          setHoldings([]);
         }
       } finally {
-        if (isMounted) setLoading(false);
+        if (active) setLoading(false);
       }
     };
 
-    fetchPortfolio();
+    fetchHoldings();
     return () => {
-      isMounted = false;
+      active = false;
       controller.abort();
     };
   }, []);
 
-  const grouped = useMemo(() => {
-    if (!rows.length) return [];
-    const map = new Map();
-
-    rows.forEach((row) => {
-      const key = `${row.isin || ''}|${row.issuerName || ''}`;
-      if (!map.has(key)) {
-        map.set(key, {
-          isin: row.isin || '-',
-          issuer: row.issuerName || '-',
-          exchanges: new Set(),
-          orderTypes: new Set(),
-          tradeCount: 0,
-          totalAmount: 0,
-          yieldSum: 0,
-          yieldCount: 0,
-          firstTradeDate: null,
-          lastTradeDate: null,
-          earliestMaturity: null,
-          latestMaturity: null,
-        });
-      }
-
-      const entry = map.get(key);
-      entry.tradeCount += 1;
-      if (row.exchange) entry.exchanges.add(row.exchange);
-      if (row.orderType) entry.orderTypes.add(row.orderType);
-
-      const amount = parseNumber(row.tradeAmountValue ?? row.tradeAmountRaw);
-      if (amount) entry.totalAmount += amount;
-
-      const yieldValue = parseNumber(row.yieldValue ?? row.yieldRaw);
-      if (yieldValue) {
-        entry.yieldSum += yieldValue;
-        entry.yieldCount += 1;
-      }
-
-      if (row.tradeDate) {
-        const tradeDate = new Date(row.tradeDate);
-        if (!Number.isNaN(tradeDate.getTime())) {
-          if (!entry.firstTradeDate || tradeDate < entry.firstTradeDate) {
-            entry.firstTradeDate = tradeDate;
-          }
-          if (!entry.lastTradeDate || tradeDate > entry.lastTradeDate) {
-            entry.lastTradeDate = tradeDate;
-          }
-        }
-      }
-
-      if (row.maturityDate) {
-        const maturity = new Date(row.maturityDate);
-        if (!Number.isNaN(maturity.getTime())) {
-          if (!entry.earliestMaturity || maturity < entry.earliestMaturity) {
-            entry.earliestMaturity = maturity;
-          }
-          if (!entry.latestMaturity || maturity > entry.latestMaturity) {
-            entry.latestMaturity = maturity;
-          }
-        }
-      }
+  const filteredHoldings = useMemo(() => {
+    const term = search.trim().toLowerCase();
+    if (!term) return holdings;
+    return holdings.filter((item) => {
+      const instrument = String(item.instrument_name || "").toLowerCase();
+      const scheme = String(item.scheme_name || "").toLowerCase();
+      const isin = String(item.isin || "").toLowerCase();
+      const rating = String(item.rating || "").toLowerCase();
+      const issuer = String(item.issuer || "").toLowerCase();
+      return (
+        instrument.includes(term) ||
+        scheme.includes(term) ||
+        isin.includes(term) ||
+        rating.includes(term) ||
+        issuer.includes(term)
+      );
     });
-
-    return Array.from(map.values()).map((entry) => ({
-      ...entry,
-      exchanges: Array.from(entry.exchanges).join(', ') || '-',
-      orderTypes: Array.from(entry.orderTypes).join(', ') || '-',
-      avgYield: entry.yieldCount > 0 ? Number(entry.yieldSum / entry.yieldCount) : null,
-      firstTradeDate: entry.firstTradeDate ? entry.firstTradeDate.toISOString() : null,
-      lastTradeDate: entry.lastTradeDate ? entry.lastTradeDate.toISOString() : null,
-      earliestMaturity: entry.earliestMaturity ? entry.earliestMaturity.toISOString() : null,
-      latestMaturity: entry.latestMaturity ? entry.latestMaturity.toISOString() : null,
-    }));
-  }, [rows]);
+  }, [holdings, search]);
 
   const summary = useMemo(() => {
-    if (!grouped.length) {
+    if (!filteredHoldings.length) {
       return {
-        issuerCount: 0,
-        tradeCount: rows.length,
-        totalAmount: 0,
-        averageYield: null,
+        holdingsCount: 0,
+        schemesCount: 0,
+        totalMarketValue: 0,
+        avgPctNav: null,
       };
     }
 
-    const totals = grouped.reduce(
-      (acc, entry) => {
-        acc.totalAmount += entry.totalAmount;
-        acc.tradeCount += entry.tradeCount;
-        if (entry.avgYield !== null) {
-          acc.yieldSum += entry.avgYield;
-          acc.yieldBuckets += 1;
+    const totals = filteredHoldings.reduce(
+      (acc, item) => {
+        const mv = parseNumber(item.market_value);
+        acc.marketValue += mv;
+
+        const pctNav =
+          parseNumber(item.pct_to_nav) ||
+          parseNumber(item.pct_to_NAV) ||
+          parseNumber(item.navPercent);
+        if (pctNav) {
+          acc.pctNavSum += pctNav;
+          acc.pctNavCount += 1;
         }
+
+        if (item.scheme_name) acc.schemes.add(item.scheme_name);
         return acc;
       },
-      { totalAmount: 0, tradeCount: 0, yieldSum: 0, yieldBuckets: 0 }
+      { marketValue: 0, pctNavSum: 0, pctNavCount: 0, schemes: new Set() }
     );
 
     return {
-      issuerCount: grouped.length,
-      tradeCount: totals.tradeCount,
-      totalAmount: totals.totalAmount,
-      averageYield:
-        totals.yieldBuckets > 0 ? Number(totals.yieldSum / totals.yieldBuckets) : null,
+      holdingsCount: filteredHoldings.length,
+      schemesCount: totals.schemes.size,
+      totalMarketValue: totals.marketValue,
+      avgPctNav: totals.pctNavCount > 0 ? totals.pctNavSum / totals.pctNavCount : null,
     };
-  }, [grouped, rows.length]);
+  }, [filteredHoldings]);
 
-  const topIssuers = useMemo(() => {
-    if (!grouped.length) return [];
-    return [...grouped]
-      .sort((a, b) => b.totalAmount - a.totalAmount)
-      .slice(0, 8)
-      .map((entry, index) => ({
-        name: entry.issuer.length > 28 ? `${entry.issuer.slice(0, 25)}…` : entry.issuer,
-        value: Number(entry.totalAmount.toFixed(2)),
-        fullIssuer: entry.issuer,
-        isin: entry.isin,
-        color: COLORS[index % COLORS.length],
-      }));
-  }, [grouped]);
+  const issuerSummaries = useMemo(() => {
+    if (!filteredHoldings.length) return [];
 
-  const topIssuersByTrades = useMemo(() => {
-    if (!grouped.length) return [];
-    return [...grouped]
-      .sort((a, b) => b.tradeCount - a.tradeCount)
-      .slice(0, 8)
-      .map((entry, index) => ({
-        name: entry.issuer.length > 24 ? `${entry.issuer.slice(0, 21)}…` : entry.issuer,
-        tradeCount: entry.tradeCount,
-        fullIssuer: entry.issuer,
-        isin: entry.isin,
-        color: COLORS[(index + 3) % COLORS.length],
-      }));
-  }, [grouped]);
+    const bucket = new Map();
 
-  const filtered = useMemo(() => {
-    const term = search.trim().toLowerCase();
-    if (!term) return grouped;
-    return grouped.filter((entry) =>
-      entry.isin.toLowerCase().includes(term) || entry.issuer.toLowerCase().includes(term)
+    filteredHoldings.forEach((item) => {
+      const issuerName = String(item.issuer || "").trim() || "Unattributed Issuer";
+      const mv = parseNumber(item.market_value);
+      const pctNav =
+        parseNumber(item.pct_to_nav) ||
+        parseNumber(item.pct_to_NAV) ||
+        parseNumber(item.navPercent);
+
+      if (!bucket.has(issuerName)) {
+        bucket.set(issuerName, {
+          issuer: issuerName,
+          holdings: [],
+          totalMarketValue: 0,
+          pctNavSum: 0,
+          pctNavCount: 0,
+          schemes: new Set(),
+        });
+      }
+
+      const entry = bucket.get(issuerName);
+      entry.holdings.push(item);
+      entry.totalMarketValue += mv;
+      if (pctNav) {
+        entry.pctNavSum += pctNav;
+        entry.pctNavCount += 1;
+      }
+      if (item.scheme_name) {
+        entry.schemes.add(item.scheme_name);
+      }
+    });
+
+    return Array.from(bucket.values())
+      .map((entry) => ({
+        issuer: entry.issuer,
+        holdings: entry.holdings,
+        totalMarketValue: entry.totalMarketValue,
+        holdingsCount: entry.holdings.length,
+        averagePctNav: entry.pctNavCount > 0 ? entry.pctNavSum / entry.pctNavCount : null,
+        schemeCount: entry.schemes.size,
+      }))
+      .sort((a, b) => b.totalMarketValue - a.totalMarketValue);
+  }, [filteredHoldings]);
+
+  const issuerMeta = useMemo(() => {
+    if (!issuerSummaries.length) {
+      return {
+        totalIssuers: 0,
+        totalMarketValue: 0,
+        topIssuer: null,
+      };
+    }
+
+    const totalMarketValue = issuerSummaries.reduce(
+      (acc, entry) => acc + entry.totalMarketValue,
+      0
     );
-  }, [grouped, search]);
+
+    return {
+      totalIssuers: issuerSummaries.length,
+      totalMarketValue,
+      topIssuer: issuerSummaries[0] || null,
+    };
+  }, [issuerSummaries]);
+
+  const issuerExposureData = useMemo(
+    () =>
+      issuerSummaries.slice(0, 12).map((entry, index) => ({
+        issuer: entry.issuer,
+        marketValue: Number(entry.totalMarketValue.toFixed(2)),
+        color: COLORS[index % COLORS.length],
+      })),
+    [issuerSummaries]
+  );
+
+  const issuerList = useMemo(() => {
+    const term = issuerQuery.trim().toLowerCase();
+    if (!term) return issuerSummaries;
+    return issuerSummaries.filter((entry) => entry.issuer.toLowerCase().includes(term));
+  }, [issuerQuery, issuerSummaries]);
+
+  useEffect(() => {
+    if (!issuerSummaries.length) {
+      setSelectedIssuer(null);
+      return;
+    }
+
+    setSelectedIssuer((prev) => {
+      if (prev && issuerSummaries.some((entry) => entry.issuer === prev)) {
+        return prev;
+      }
+      return issuerSummaries[0].issuer;
+    });
+  }, [issuerSummaries]);
+
+  const activeIssuer = useMemo(() => {
+    if (!selectedIssuer) return null;
+    const entry = issuerSummaries.find((issuer) => issuer.issuer === selectedIssuer);
+    if (!entry) return null;
+
+    const totalValue = entry.totalMarketValue || 0;
+
+    const instrumentMap = new Map();
+    const ratingMap = new Map();
+    const schemeMap = new Map();
+
+    entry.holdings.forEach((holding) => {
+      const value = parseNumber(holding.market_value);
+      const instrument = holding.instrumentType || "Unclassified";
+      const rating = holding.rating || "Unrated";
+      const scheme = holding.scheme_name || "Unnamed Scheme";
+
+      instrumentMap.set(instrument, (instrumentMap.get(instrument) || 0) + value);
+      ratingMap.set(rating, (ratingMap.get(rating) || 0) + 1);
+      schemeMap.set(scheme, (schemeMap.get(scheme) || 0) + value);
+    });
+
+    const instrumentMix = Array.from(instrumentMap.entries())
+      .map(([name, value], index) => ({
+        name,
+        value: Number(value.toFixed(2)),
+        color: COLORS[index % COLORS.length],
+      }))
+      .sort((a, b) => b.value - a.value);
+
+    const ratingBreakdown = Array.from(ratingMap.entries())
+      .map(([rating, count], index) => ({
+        rating,
+        count,
+        color: SECONDARY_COLORS[index % SECONDARY_COLORS.length],
+      }))
+      .sort((a, b) => b.count - a.count)
+      .slice(0, 12);
+
+    const schemeBreakdown = Array.from(schemeMap.entries())
+      .map(([scheme, value]) => ({
+        scheme,
+        value,
+        percentage: totalValue > 0 ? (value / totalValue) * 100 : 0,
+      }))
+      .sort((a, b) => b.value - a.value)
+      .slice(0, 8);
+
+    const topHoldings = [...entry.holdings]
+      .sort((a, b) => parseNumber(b.market_value) - parseNumber(a.market_value))
+      .slice(0, 25);
+
+    return {
+      ...entry,
+      instrumentMix,
+      ratingBreakdown,
+      schemeBreakdown,
+      topHoldings,
+    };
+  }, [issuerSummaries, selectedIssuer]);
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 text-slate-50">
-      <div className="mx-auto max-w-7xl px-4 py-12 sm:px-6 lg:px-8">
-        <header className="mb-10 flex flex-col gap-6 rounded-3xl bg-white/10 p-8 shadow-xl ring-1 ring-white/10 backdrop-blur">
-          <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
-            <div>
-              <p className="text-xs uppercase tracking-[0.3em] text-indigo-200">Analytics</p>
-              <h1 className="mt-2 text-3xl font-semibold text-white sm:text-4xl">
-                Issuer Portfolio Intelligence
-              </h1>
-              <p className="mt-3 max-w-2xl text-sm text-slate-200">
-                Consolidated view of traded securities, amounts, and yields grouped by issuer. Use the
-                search to focus on a specific counterparty.
+    <div className="issuer-page">
+      <div className="issuer-shell">
+        <header className="issuer-card issuer-card--glass issuer-hero">
+          <div className="issuer-hero__layout">
+            <div className="issuer-hero__intro">
+              <span className="issuer-tag">Mutual Funds</span>
+              <h1 className="issuer-title">Issuer Exposure Dashboard</h1>
+              <p className="issuer-subtitle">
+                Explore holdings grouped by issuer, understand concentration risks, and dig into
+                scheme level contributions. Use the search box to refine the universe by scheme,
+                instrument, ISIN, rating, or issuer name.
               </p>
             </div>
-            <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+            <div className="issuer-hero__controls">
               <input
                 value={search}
                 onChange={(event) => setSearch(event.target.value)}
-                placeholder="Search by issuer or ISIN"
-                className="w-full rounded-lg border border-indigo-400/60 bg-white/90 px-4 py-2 text-sm text-slate-700 shadow focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-400/60 sm:w-72"
+                placeholder="Search issuer, scheme, instrument, ISIN, or rating"
+                className="issuer-input"
               />
-              <span className="rounded-full border border-white/20 bg-white/10 px-3 py-1 text-xs font-semibold uppercase tracking-wide text-indigo-100">
-                {filtered.length} issuers
-              </span>
+              <span className="issuer-chip">{filteredHoldings.length} holdings</span>
             </div>
           </div>
 
-          <dl className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-            <div className="rounded-2xl bg-indigo-500/20 px-5 py-4 ring-1 ring-indigo-400/40">
-              <dt className="text-xs uppercase tracking-wide text-indigo-200">Issuers</dt>
-              <dd className="mt-1 text-2xl font-semibold text-white">{summary.issuerCount.toLocaleString()}</dd>
-              <p className="text-xs text-indigo-100/80">Active across current selection</p>
-            </div>
-            <div className="rounded-2xl bg-sky-500/20 px-5 py-4 ring-1 ring-sky-400/40">
-              <dt className="text-xs uppercase tracking-wide text-sky-200">Total Trades</dt>
-              <dd className="mt-1 text-2xl font-semibold text-white">{summary.tradeCount.toLocaleString()}</dd>
-              <p className="text-xs text-sky-100/80">Across fetched transactions</p>
-            </div>
-            <div className="rounded-2xl bg-emerald-500/20 px-5 py-4 ring-1 ring-emerald-400/40">
-              <dt className="text-xs uppercase tracking-wide text-emerald-200">Amount (Rs Lacs)</dt>
-              <dd className="mt-1 text-2xl font-semibold text-white">
-                {summary.totalAmount.toLocaleString('en-IN', { maximumFractionDigits: 2 })}
-              </dd>
-              <p className="text-xs text-emerald-100/80">Cumulative deal value</p>
-            </div>
-            <div className="rounded-2xl bg-amber-500/20 px-5 py-4 ring-1 ring-amber-400/40">
-              <dt className="text-xs uppercase tracking-wide text-amber-200">Average Yield</dt>
-              <dd className="mt-1 text-2xl font-semibold text-white">
-                {Number.isFinite(summary.averageYield) ? `${summary.averageYield.toFixed(2)}%` : '–'}
-              </dd>
-              <p className="text-xs text-amber-100/80">Across issuers with yield data</p>
-            </div>
-          </dl>
+          <ul className="issuer-stats">
+            <li className="issuer-stat">
+              <p className="issuer-stat__label">Unique Issuers</p>
+              <p className="issuer-stat__value">
+                {issuerMeta.totalIssuers.toLocaleString("en-IN")}
+              </p>
+              <span className="issuer-stat__hint">In the current filtered view</span>
+            </li>
+            <li className="issuer-stat">
+              <p className="issuer-stat__label">Holdings in Scope</p>
+              <p className="issuer-stat__value">
+                {summary.holdingsCount.toLocaleString("en-IN")}
+              </p>
+              <span className="issuer-stat__hint">Individual rows contributing to issuer totals</span>
+            </li>
+            <li className="issuer-stat">
+              <p className="issuer-stat__label">Market Value (Rs Lacs)</p>
+              <p className="issuer-stat__value">{formatCurrency(summary.totalMarketValue)}</p>
+              <span className="issuer-stat__hint">Aggregated across the filtered holdings</span>
+            </li>
+            <li className="issuer-stat">
+              <p className="issuer-stat__label">Top Issuer Exposure</p>
+              <p className="issuer-stat__value">
+                {issuerMeta.topIssuer ? issuerMeta.topIssuer.issuer : "Awaiting selection"}
+              </p>
+              <span className="issuer-stat__hint">
+                {issuerMeta.topIssuer
+                  ? formatCurrency(issuerMeta.topIssuer.totalMarketValue)
+                  : "No issuer data available"}
+              </span>
+            </li>
+          </ul>
         </header>
 
         {loading ? (
-          <div className="rounded-3xl bg-white/10 px-6 py-16 text-center text-sm text-slate-200 shadow-xl ring-1 ring-white/10 backdrop-blur">
-            Loading issuer portfolio…
-          </div>
+          <div className="issuer-card issuer-card--message">Loading issuer dashboard…</div>
         ) : error ? (
-          <div className="rounded-3xl bg-rose-500/10 px-6 py-16 text-center text-sm text-rose-100 shadow-xl ring-1 ring-rose-400/40 backdrop-blur">
-            {error}
-          </div>
-        ) : filtered.length === 0 ? (
-          <div className="rounded-3xl bg-white/10 px-6 py-16 text-center text-sm text-slate-200 shadow-xl ring-1 ring-white/10 backdrop-blur">
-            No issuers match the current search.
+          <div className="issuer-card issuer-card--message issuer-card--error">{error}</div>
+        ) : filteredHoldings.length === 0 ? (
+          <div className="issuer-card issuer-card--message">
+            No holdings match the current search.
           </div>
         ) : (
-          <div className="space-y-8">
-            <section className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,420px)]">
-              <div className="overflow-hidden rounded-3xl bg-white/90 shadow-xl ring-1 ring-slate-200/60">
-                <div className="overflow-x-auto">
-                  <table className="min-w-full divide-y divide-slate-200 text-sm">
-                    <thead className="bg-slate-50 text-xs font-semibold uppercase tracking-wide text-slate-500">
-                      <tr>
-                        <th className="px-4 py-3 text-left">Issuer</th>
-                        <th className="px-4 py-3 text-left">ISIN</th>
-                        <th className="px-4 py-3 text-left">Exchanges</th>
-                        <th className="px-4 py-3 text-left">Deal Types</th>
-                        <th className="px-4 py-3 text-right">Trades</th>
-                        <th className="px-4 py-3 text-right">Amount (Rs Lacs)</th>
-                        <th className="px-4 py-3 text-right">Avg Yield</th>
-                        <th className="px-4 py-3 text-left">First Trade</th>
-                        <th className="px-4 py-3 text-left">Last Trade</th>
-                        <th className="px-4 py-3 text-left">Earliest Maturity</th>
-                        <th className="px-4 py-3 text-left">Latest Maturity</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-slate-100 bg-white text-slate-700">
-                      {filtered.map((entry) => (
-                        <tr key={`${entry.isin}|${entry.issuer}`} className="hover:bg-indigo-50/40">
-                          <td className="px-4 py-3 font-semibold text-slate-800">{entry.issuer}</td>
-                          <td className="px-4 py-3 font-mono text-xs uppercase text-slate-500">{entry.isin}</td>
-                          <td className="px-4 py-3">{entry.exchanges}</td>
-                          <td className="px-4 py-3">{entry.orderTypes}</td>
-                          <td className="px-4 py-3 text-right font-semibold">{entry.tradeCount}</td>
-                          <td className="px-4 py-3 text-right text-indigo-600">
-                            {formatCurrency(entry.totalAmount)}
-                          </td>
-                          <td className="px-4 py-3 text-right">
-                            {Number.isFinite(entry.avgYield) ? `${entry.avgYield.toFixed(2)}%` : '–'}
-                          </td>
-                          <td className="px-4 py-3 text-slate-600">{formatDate(entry.firstTradeDate)}</td>
-                          <td className="px-4 py-3 text-slate-600">{formatDate(entry.lastTradeDate)}</td>
-                          <td className="px-4 py-3 text-slate-600">{formatDate(entry.earliestMaturity)}</td>
-                          <td className="px-4 py-3 text-slate-600">{formatDate(entry.latestMaturity)}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
+          <div className="issuer-content">
+            <section className="issuer-card">
+              <div className="issuer-card__header">
+                <div>
+                  <h2>Issuer Exposure Overview</h2>
+                  <p>Largest issuers ranked by market value. Click a bar to focus the detail panel.</p>
                 </div>
+                <span className="issuer-chip issuer-chip--light">
+                  Top {issuerExposureData.length.toLocaleString("en-IN")} issuers
+                </span>
               </div>
-
-              <div className="flex flex-col gap-6">
-                <div className="rounded-3xl bg-white/90 p-6 shadow-xl ring-1 ring-slate-200/60">
-                  <h2 className="text-lg font-semibold text-slate-900">Top Issuers by Amount</h2>
-                  <p className="mt-1 text-xs text-slate-500">
-                    Distribution of cumulative traded amount (Rs Lacs) for the leading counterparties.
-                  </p>
-                  <div className="mt-6 h-72">
-                    {topIssuers.length === 0 ? (
-                      <div className="flex h-full items-center justify-center text-sm text-slate-400">
-                        Not enough data to render chart.
-                      </div>
-                    ) : (
-                      <ResponsiveContainer width="100%" height="100%">
-                        <PieChart>
-                          <Pie
-                            data={topIssuers}
-                            dataKey="value"
-                            nameKey="name"
-                            innerRadius="45%"
-                            outerRadius="70%"
-                            paddingAngle={2}
-                          >
-                            {topIssuers.map((entry) => (
-                              <Cell key={entry.name} fill={entry.color} />
-                            ))}
-                          </Pie>
-                          <RechartsTooltip
-                            formatter={(value, _, payload) => [value.toLocaleString('en-IN', { maximumFractionDigits: 2 }), payload?.payload?.fullIssuer]}
+              <div className="issuer-chart issuer-chart--bar">
+                {issuerExposureData.length === 0 ? (
+                  <div className="issuer-chart__empty">Not enough issuer data to render the chart.</div>
+                ) : (
+                  <ResponsiveContainer width="100%" height="100%">
+                    <BarChart
+                      data={issuerExposureData}
+                      margin={{ top: 12, right: 24, left: 0, bottom: 36 }}
+                    >
+                      <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
+                      <XAxis
+                        dataKey="issuer"
+                        angle={-20}
+                        textAnchor="end"
+                        height={60}
+                        axisLine={false}
+                        tickLine={false}
+                      />
+                      <YAxis
+                        axisLine={false}
+                        tickLine={false}
+                        tickFormatter={(value) => formatCompactCurrency(value)}
+                      />
+                      <RechartsTooltip
+                        formatter={(value, _label, payload) => [
+                          formatCurrency(value),
+                          payload?.payload?.issuer,
+                        ]}
+                      />
+                      <Bar dataKey="marketValue" radius={[10, 10, 0, 0]}>
+                        {issuerExposureData.map((entry) => (
+                          <Cell
+                            key={entry.issuer}
+                            fill={entry.color}
+                            style={{ cursor: "pointer" }}
+                            onClick={() => setSelectedIssuer(entry.issuer)}
                           />
-                          <Legend
-                            verticalAlign="bottom"
-                            height={36}
-                            formatter={(value, entry) => {
-                              const payload = entry?.payload;
-                              return payload?.fullIssuer || value;
-                            }}
-                          />
-                        </PieChart>
-                      </ResponsiveContainer>
-                    )}
-                  </div>
-                </div>
-
-                <div className="rounded-3xl bg-white/90 p-6 shadow-xl ring-1 ring-slate-200/60">
-                  <h2 className="text-lg font-semibold text-slate-900">Most Active Issuers</h2>
-                  <p className="mt-1 text-xs text-slate-500">
-                    Issuers ranked by total trade count to highlight the busiest relationships.
-                  </p>
-                  <div className="mt-6 h-72">
-                    {topIssuersByTrades.length === 0 ? (
-                      <div className="flex h-full items-center justify-center text-sm text-slate-400">
-                        Not enough data to render chart.
-                      </div>
-                    ) : (
-                      <ResponsiveContainer width="100%" height="100%">
-                        <BarChart
-                          data={topIssuersByTrades}
-                          layout="vertical"
-                          margin={{ top: 8, right: 12, left: 12, bottom: 8 }}
-                        >
-                          <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
-                          <XAxis type="number" axisLine={false} tickLine={false} />
-                          <YAxis
-                            dataKey="name"
-                            type="category"
-                            axisLine={false}
-                            tickLine={false}
-                            width={150}
-                          />
-                          <RechartsTooltip
-                            cursor={{ fill: 'rgba(99, 102, 241, 0.06)' }}
-                            formatter={(value, _, payload) => [
-                              value.toLocaleString(),
-                              payload?.payload?.fullIssuer,
-                            ]}
-                          />
-                          <Bar dataKey="tradeCount" radius={[6, 6, 6, 6]}>
-                            {topIssuersByTrades.map((entry) => (
-                              <Cell key={entry.fullIssuer} fill={entry.color} />
-                            ))}
-                          </Bar>
-                        </BarChart>
-                      </ResponsiveContainer>
-                    )}
-                  </div>
-                </div>
-
-                <div className="rounded-3xl bg-white/90 p-6 shadow-xl ring-1 ring-slate-200/60">
-                  <h2 className="text-lg font-semibold text-slate-900">Quick Insights</h2>
-                  <ul className="mt-4 space-y-3 text-sm text-slate-600">
-                    <li>
-                      • <strong>{summary.tradeCount.toLocaleString()}</strong> trades captured across{' '}
-                      <strong>{summary.issuerCount.toLocaleString()}</strong> unique issuers.
-                    </li>
-                    <li>
-                      • Total traded amount stands at{' '}
-                      <strong>{summary.totalAmount.toLocaleString('en-IN', { maximumFractionDigits: 2 })}</strong>{' '}
-                      Rs Lacs.
-                    </li>
-                    <li>
-                      • Average recorded yield:{' '}
-                      <strong>
-                        {Number.isFinite(summary.averageYield)
-                          ? ` ${summary.averageYield.toFixed(2)}%`
-                          : ' N/A'}
-                      </strong>
-                      .
-                    </li>
-                    <li>
-                      • Top counterparties span {new Set(grouped.flatMap((entry) => entry.exchanges.split(', '))).size}{' '}
-                      exchanges and {new Set(grouped.flatMap((entry) => entry.orderTypes.split(', '))).size} deal styles.
-                    </li>
-                  </ul>
-                </div>
+                        ))}
+                      </Bar>
+                    </BarChart>
+                  </ResponsiveContainer>
+                )}
               </div>
             </section>
+
+            <div className="issuer-grid">
+              <section className="issuer-card issuer-card--sidebar">
+                <div className="issuer-card__header issuer-card__header--stacked">
+                  <div>
+                    <h2>Issuer Leaderboard</h2>
+                    <p>Select an issuer to inspect concentration, schemes, and holdings.</p>
+                  </div>
+                  <input
+                    value={issuerQuery}
+                    onChange={(event) => setIssuerQuery(event.target.value)}
+                    placeholder="Filter issuer name"
+                    className="issuer-input issuer-input--subtle"
+                  />
+                </div>
+
+                <div className="issuer-leaderboard">
+                  {issuerList.length === 0 ? (
+                    <div className="issuer-leaderboard__empty">No issuer matches the filter.</div>
+                  ) : (
+                    issuerList.map((entry) => {
+                      const share =
+                        issuerMeta.totalMarketValue > 0
+                          ? (entry.totalMarketValue / issuerMeta.totalMarketValue) * 100
+                          : 0;
+                      const isActive = entry.issuer === selectedIssuer;
+
+                      return (
+                        <button
+                          key={entry.issuer}
+                          type="button"
+                          onClick={() => setSelectedIssuer(entry.issuer)}
+                          className={`issuer-leaderboard__item${
+                            isActive ? " issuer-leaderboard__item--active" : ""
+                          }`}
+                        >
+                          <div className="issuer-leaderboard__heading">
+                            <span className="issuer-leaderboard__name">{entry.issuer}</span>
+                            <span className="issuer-leaderboard__value">
+                              {formatCurrency(entry.totalMarketValue)}
+                            </span>
+                          </div>
+                          <div className="issuer-leaderboard__meta">
+                            <span>
+                              {entry.schemeCount.toLocaleString("en-IN")} schemes · {" "}
+                              {entry.holdingsCount.toLocaleString("en-IN")} holdings
+                            </span>
+                            <span>{percentageFormatter.format(share)}% of filtered MV</span>
+                          </div>
+                        </button>
+                      );
+                    })
+                  )}
+                </div>
+              </section>
+
+              <section className="issuer-card issuer-card--detail">
+                {activeIssuer ? (
+                  <>
+                    <div className="issuer-card__header">
+                      <div>
+                        <span className="issuer-tag issuer-tag--accent">Selected Issuer</span>
+                        <h2>{activeIssuer.issuer}</h2>
+                        <p>Aggregate exposure across all holdings currently in scope.</p>
+                      </div>
+                    </div>
+
+                    <div className="issuer-detail-metrics">
+                      <div className="issuer-detail-metric">
+                        <p className="issuer-detail-metric__label">Market Value (Rs Lacs)</p>
+                        <p className="issuer-detail-metric__value">
+                          {formatCurrency(activeIssuer.totalMarketValue)}
+                        </p>
+                        <span className="issuer-detail-metric__hint">
+                          Across all holdings for this issuer
+                        </span>
+                      </div>
+                      <div className="issuer-detail-metric">
+                        <p className="issuer-detail-metric__label">Holdings Count</p>
+                        <p className="issuer-detail-metric__value">
+                          {activeIssuer.holdingsCount.toLocaleString("en-IN")}
+                        </p>
+                        <span className="issuer-detail-metric__hint">
+                          Rows contributing to this issuer
+                        </span>
+                      </div>
+                      <div className="issuer-detail-metric">
+                        <p className="issuer-detail-metric__label">Unique Schemes</p>
+                        <p className="issuer-detail-metric__value">
+                          {activeIssuer.schemeCount.toLocaleString("en-IN")}
+                        </p>
+                        <span className="issuer-detail-metric__hint">Distinct scheme exposures</span>
+                      </div>
+                      <div className="issuer-detail-metric">
+                        <p className="issuer-detail-metric__label">Average % to NAV</p>
+                        <p className="issuer-detail-metric__value">
+                          {activeIssuer.averagePctNav === null
+                            ? "NA"
+                            : `${percentageFormatter.format(activeIssuer.averagePctNav)}%`}
+                        </p>
+                        <span className="issuer-detail-metric__hint">
+                          Across holdings with NAV data
+                        </span>
+                      </div>
+                    </div>
+
+                    <div className="issuer-mini-grid">
+                      <div className="issuer-mini-card">
+                        <div className="issuer-mini-card__header">
+                          <h3>Instrument Mix</h3>
+                          <p>Share of market value by instrument classification.</p>
+                        </div>
+                        <div className="issuer-chart">
+                          {activeIssuer.instrumentMix.length === 0 ? (
+                            <div className="issuer-chart__empty">
+                              Not enough data to render chart.
+                            </div>
+                          ) : (
+                            <ResponsiveContainer width="100%" height="100%">
+                              <PieChart>
+                                <Pie
+                                  data={activeIssuer.instrumentMix}
+                                  dataKey="value"
+                                  nameKey="name"
+                                  innerRadius="45%"
+                                  outerRadius="68%"
+                                  paddingAngle={1.6}
+                                >
+                                  {activeIssuer.instrumentMix.map((segment) => (
+                                    <Cell key={segment.name} fill={segment.color} />
+                                  ))}
+                                </Pie>
+                                <RechartsTooltip
+                                  formatter={(value, _label, payload) => [
+                                    formatCurrency(value),
+                                    payload?.payload?.name,
+                                  ]}
+                                />
+                                <Legend verticalAlign="bottom" height={32} />
+                              </PieChart>
+                            </ResponsiveContainer>
+                          )}
+                        </div>
+                      </div>
+
+                      <div className="issuer-mini-card">
+                        <div className="issuer-mini-card__header">
+                          <h3>Rating Distribution</h3>
+                          <p>Count of holdings by credit rating (top 12 buckets).</p>
+                        </div>
+                        <div className="issuer-chart">
+                          {activeIssuer.ratingBreakdown.length === 0 ? (
+                            <div className="issuer-chart__empty">
+                              Ratings were unavailable for this issuer.
+                            </div>
+                          ) : (
+                            <ResponsiveContainer width="100%" height="100%">
+                              <BarChart
+                                data={activeIssuer.ratingBreakdown}
+                                margin={{ top: 12, right: 24, left: 0, bottom: 24 }}
+                              >
+                                <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
+                                <XAxis
+                                  dataKey="rating"
+                                  angle={-25}
+                                  textAnchor="end"
+                                  height={60}
+                                  axisLine={false}
+                                  tickLine={false}
+                                />
+                                <YAxis allowDecimals={false} axisLine={false} tickLine={false} />
+                                <RechartsTooltip />
+                                <Bar dataKey="count" radius={[8, 8, 0, 0]}>
+                                  {activeIssuer.ratingBreakdown.map((entry) => (
+                                    <Cell key={entry.rating} fill={entry.color} />
+                                  ))}
+                                </Bar>
+                              </BarChart>
+                            </ResponsiveContainer>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="issuer-card__section">
+                      <div className="issuer-card__header issuer-card__header--compact">
+                        <h3>Scheme Contributions</h3>
+                        <p>Top schemes ranked by market value within this issuer.</p>
+                      </div>
+                      <div className="issuer-scheme-list">
+                        {activeIssuer.schemeBreakdown.length === 0 ? (
+                          <div className="issuer-scheme-list__empty">
+                            No scheme level data available.
+                          </div>
+                        ) : (
+                          activeIssuer.schemeBreakdown.map((scheme) => (
+                            <div key={scheme.scheme} className="issuer-scheme">
+                              <div className="issuer-scheme__header">
+                                <span className="issuer-scheme__name">{scheme.scheme}</span>
+                                <span className="issuer-scheme__value">
+                                  {formatCurrency(scheme.value)}
+                                </span>
+                              </div>
+                              <div className="issuer-progress">
+                                <div
+                                  className="issuer-progress__fill"
+                                  style={{
+                                    width: `${Math.min(100, Math.max(2, scheme.percentage))}%`,
+                                  }}
+                                />
+                              </div>
+                              <span className="issuer-scheme__hint">
+                                {percentageFormatter.format(scheme.percentage)}% of issuer exposure
+                              </span>
+                            </div>
+                          ))
+                        )}
+                      </div>
+                    </div>
+
+                    <div className="issuer-card__section">
+                      <div className="issuer-card__header issuer-card__header--compact">
+                        <h3>Holdings Breakdown</h3>
+                        <p>Top 25 holdings by market value within the selected issuer.</p>
+                      </div>
+                      <div className="issuer-table__wrapper">
+                        <table className="issuer-table">
+                          <thead>
+                            <tr>
+                              <th>Scheme</th>
+                              <th>Instrument</th>
+                              <th>ISIN</th>
+                              <th>Rating</th>
+                              <th>Instrument Type</th>
+                              <th className="align-right">Market Value (Rs Lacs)</th>
+                              <th className="align-right">% to NAV</th>
+                              <th className="align-right">Quantity</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {activeIssuer.topHoldings.map((holding) => {
+                              const pctToNav =
+                                parseNumber(holding.pct_to_nav) ||
+                                parseNumber(holding.pct_to_NAV) ||
+                                parseNumber(holding.navPercent);
+
+                              return (
+                                <tr
+                                  key={`${holding.scheme_name}-${holding.instrument_name}-${holding.isin}`}
+                                >
+                                  <td className="issuer-table__cell--strong">
+                                    {holding.scheme_name || "N/A"}
+                                  </td>
+                                  <td>
+                                    <span className="issuer-table__cell--strong">
+                                      {holding.instrument_name || "N/A"}
+                                    </span>
+                                    {holding.sector ? (
+                                      <span className="issuer-badge">{holding.sector}</span>
+                                    ) : null}
+                                  </td>
+                                  <td className="issuer-table__cell--mono">
+                                    {holding.isin || "N/A"}
+                                  </td>
+                                  <td>{holding.rating || "Unrated"}</td>
+                                  <td>{holding.instrumentType || "Unclassified"}</td>
+                                  <td className="align-right issuer-table__cell--strong">
+                                    {formatCurrency(parseNumber(holding.market_value))}
+                                  </td>
+                                  <td className="align-right">
+                                    {pctToNav ? `${percentageFormatter.format(pctToNav)}%` : "N/A"}
+                                  </td>
+                                  <td className="align-right">
+                                    {parseNumber(holding.quantity).toLocaleString("en-IN")}
+                                  </td>
+                                </tr>
+                              );
+                            })}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+                  </>
+                ) : (
+                  <div className="issuer-placeholder">
+                    Select an issuer to view detailed analytics.
+                  </div>
+                )}
+              </section>
+            </div>
           </div>
         )}
       </div>
     </div>
   );
 }
-
-
