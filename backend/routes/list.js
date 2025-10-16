@@ -512,16 +512,29 @@ router.get('/investor-data', async (req, res) => {
     const isins = [...new Set(items.map(item => item.isin).filter(Boolean))];
     const issuerMap = {};
     
+    console.log(`[Investor Data] Processing ${isins.length} unique ISINs`);
+    
     if (isins.length > 0) {
       // Get data from MasterRating model (PRIMARY SOURCE)
       const masterRatings = await MasterRating.find({ isin: { $in: isins } })
         .select('isin issuerName rating ratingGroup metadata')
         .lean();
       
+      console.log(`[Investor Data] Found ${masterRatings.length} issuers from MasterRating`);
+      if (masterRatings.length > 0) {
+        console.log(`[Investor Data] Sample MasterRating:`, {
+          isin: masterRatings[0].isin,
+          issuerName: masterRatings[0].issuerName,
+          rating: masterRatings[0].rating
+        });
+      }
+      
       // Get data from Issuer model (FALLBACK)
       const issuers = await Issuer.find({ isin: { $in: isins } })
         .select('isin company sector rating')
         .lean();
+      
+      console.log(`[Investor Data] Found ${issuers.length} issuers from Issuer model`);
       
       // Build issuer map - MasterRating as primary source
       masterRatings.forEach(mr => {
@@ -554,6 +567,15 @@ router.get('/investor-data', async (req, res) => {
     const transformedItems = items.map((item) => {
       const issuerInfo = issuerMap[item.isin] || {};
       
+      // Debug first item
+      if (items.indexOf(item) === 0) {
+        console.log(`[Investor Data] First transformed item:`, {
+          isin: item.isin,
+          issuerFromMap: issuerInfo.company,
+          issuerFromItem: item.issuer
+        });
+      }
+      
       return {
         _id: item._id,
         issuer: issuerInfo.company || item.issuer || 'N/A',
@@ -574,6 +596,8 @@ router.get('/investor-data', async (req, res) => {
         coupon: item.coupon || null,
       };
     });
+    
+    console.log(`[Investor Data] Returning ${transformedItems.length} transformed items`);
 
     res.json({
       page,
@@ -581,6 +605,12 @@ router.get('/investor-data', async (req, res) => {
       total,
       totalPages: Math.max(1, Math.ceil(total / limit)),
       items: transformedItems,
+      debug: {
+        totalIsins: isins.length,
+        foundInMasterRating: Object.keys(issuerMap).length,
+        sampleIsin: isins[0],
+        sampleIssuerInfo: issuerMap[isins[0]] || null,
+      }
     });
   } catch (error) {
     console.error(error);
@@ -647,6 +677,67 @@ router.get('/investor-data/issuers', async (req, res) => {
       .slice(0, 20);
 
     res.json({ issuers: finalNames });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ message: 'error', error: error.message });
+  }
+});
+
+// Test route: Get sample issuer data from MasterRating
+router.get('/investor-data/sample', async (req, res) => {
+  try {
+    const sampleIssuers = await MasterRating.find({ issuerName: { $ne: '', $exists: true } })
+      .select('isin issuerName rating ratingGroup metadata')
+      .limit(10)
+      .lean();
+
+    res.json({
+      count: sampleIssuers.length,
+      samples: sampleIssuers,
+    });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ message: 'error', error: error.message });
+  }
+});
+
+// Diagnostic route: Compare ISINs between InstrumentHolding and MasterRating
+router.get('/investor-data/diagnostic', async (req, res) => {
+  try {
+    // Get 10 ISINs from InstrumentHolding
+    const holdings = await InstrumentHolding.find({ isin: { $exists: true, $ne: null, $ne: '' } })
+      .select('isin issuer instrumentName')
+      .limit(10)
+      .lean();
+
+    const holdingIsins = holdings.map(h => h.isin);
+    
+    // Try to find them in MasterRating
+    const matchedInMasterRating = await MasterRating.find({ isin: { $in: holdingIsins } })
+      .select('isin issuerName')
+      .lean();
+
+    // Get some sample ISINs from MasterRating
+    const sampleMasterRatings = await MasterRating.find({ issuerName: { $ne: '', $exists: true } })
+      .select('isin issuerName')
+      .limit(5)
+      .lean();
+
+    res.json({
+      holdingIsins: holdings.map(h => ({
+        isin: h.isin,
+        length: h.isin?.length,
+        issuer: h.issuer,
+        instrumentName: h.instrumentName
+      })),
+      matchedInMasterRating: matchedInMasterRating.length,
+      matched: matchedInMasterRating,
+      sampleFromMasterRating: sampleMasterRatings.map(mr => ({
+        isin: mr.isin,
+        length: mr.isin?.length,
+        issuerName: mr.issuerName
+      }))
+    });
   } catch (error) {
     console.error(error);
     res.status(500).json({ message: 'error', error: error.message });

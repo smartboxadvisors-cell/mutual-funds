@@ -23,9 +23,10 @@ const buildApiUrl = (path) => {
   return `${API_BASE}${normalizedPath}`;
 };
 
-const FETCH_LIMIT = 500;
+const FETCH_LIMIT = 100; // Reduced from 500 for faster initial load
 const SCHEMES_PER_PAGE = 100;
 const SCHEME_CHART_SAMPLE = 12;
+const MAX_PAGES_TO_FETCH = 20; // Limit total pages for performance
 
 const COLORS = [
   "#4c51bf",
@@ -94,6 +95,7 @@ const parseNumber = (value) => {
 export default function IssuerPortfolio() {
   const [holdings, setHoldings] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [loadingProgress, setLoadingProgress] = useState(0);
   const [error, setError] = useState(null);
   const [search, setSearch] = useState("");
   const [schemeQuery, setSchemeQuery] = useState("");
@@ -106,6 +108,7 @@ export default function IssuerPortfolio() {
     const fetchHoldings = async () => {
       try {
         setLoading(true);
+        setLoadingProgress(0);
         setError(null);
 
         const token = localStorage.getItem("token");
@@ -113,7 +116,8 @@ export default function IssuerPortfolio() {
         let page = 1;
         let totalPages = 1;
 
-        while (page <= totalPages) {
+        // Limit the number of pages to fetch for performance
+        while (page <= totalPages && page <= MAX_PAGES_TO_FETCH) {
           const params = new URLSearchParams({
             page: String(page),
             limit: String(FETCH_LIMIT),
@@ -153,7 +157,12 @@ export default function IssuerPortfolio() {
           const items = Array.isArray(payload.items) ? payload.items : [];
           allHoldings.push(...items);
 
-          totalPages = payload.totalPages || 1;
+          totalPages = Math.min(payload.totalPages || 1, MAX_PAGES_TO_FETCH);
+          
+          // Update progress
+          const progress = Math.round((page / totalPages) * 100);
+          setLoadingProgress(progress);
+          
           page += 1;
         }
 
@@ -167,7 +176,10 @@ export default function IssuerPortfolio() {
           setHoldings([]);
         }
       } finally {
-        if (active) setLoading(false);
+        if (active) {
+          setLoading(false);
+          setLoadingProgress(100);
+        }
       }
     };
 
@@ -449,7 +461,31 @@ export default function IssuerPortfolio() {
         </header>
 
         {loading ? (
-          <div className="issuer-card issuer-card--message">Loading scheme dashboard…</div>
+          <div className="issuer-card issuer-card--message">
+            <div style={{ textAlign: 'center' }}>
+              <div style={{ fontSize: '1.2rem', marginBottom: '1rem' }}>
+                Loading scheme dashboard...
+              </div>
+              <div style={{ 
+                width: '100%', 
+                height: '8px', 
+                backgroundColor: '#e2e8f0', 
+                borderRadius: '4px',
+                overflow: 'hidden',
+                marginBottom: '0.5rem'
+              }}>
+                <div style={{ 
+                  width: `${loadingProgress}%`, 
+                  height: '100%', 
+                  backgroundColor: '#4c51bf',
+                  transition: 'width 0.3s ease'
+                }}></div>
+              </div>
+              <div style={{ fontSize: '0.9rem', color: '#718096' }}>
+                {loadingProgress}% complete
+              </div>
+            </div>
+          </div>
         ) : error ? (
           <div className="issuer-card issuer-card--message issuer-card--error">{error}</div>
         ) : schemeSummaries.length === 0 ? (
@@ -547,7 +583,7 @@ export default function IssuerPortfolio() {
                       const shareText =
                         schemeMeta.totalMarketValue > 0
                           ? `${percentageFormatter.format(share)}% of MV`
-                          : "—";
+                          : "ï¿½";
 
                       return (
                         <button
@@ -566,7 +602,7 @@ export default function IssuerPortfolio() {
                           </div>
                           <div className="issuer-leaderboard__meta">
                             <span>
-                              {entry.holdingsCount.toLocaleString("en-IN")} holdings · {avgPctNavText}
+                              {entry.holdingsCount.toLocaleString("en-IN")} holdings ï¿½ {avgPctNavText}
                             </span>
                             <span>{shareText}</span>
                           </div>
