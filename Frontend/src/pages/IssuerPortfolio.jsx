@@ -1,4 +1,4 @@
-﻿import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import {
   ResponsiveContainer,
   PieChart,
@@ -435,7 +435,7 @@ export default function IssuerPortfolio() {
         </header>
 
         {loading ? (
-          <div className="issuer-card issuer-card--message">Loading issuer dashboard…</div>
+          <div className="issuer-card issuer-card--message">Loading issuer dashboard�</div>
         ) : error ? (
           <div className="issuer-card issuer-card--message issuer-card--error">{error}</div>
         ) : filteredHoldings.length === 0 ? (
@@ -542,7 +542,7 @@ export default function IssuerPortfolio() {
                           </div>
                           <div className="issuer-leaderboard__meta">
                             <span>
-                              {entry.schemeCount.toLocaleString("en-IN")} schemes · {" "}
+                              {entry.schemeCount.toLocaleString("en-IN")} schemes � {" "}
                               {entry.holdingsCount.toLocaleString("en-IN")} holdings
                             </span>
                             <span>{percentageFormatter.format(share)}% of filtered MV</span>
