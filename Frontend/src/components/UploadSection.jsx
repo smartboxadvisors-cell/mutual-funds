@@ -6,6 +6,7 @@ export default function UploadSection({ onUploadSuccess }) {
   const [uploading, setUploading] = useState(false);
   const [uploadQueue, setUploadQueue] = useState([]);
   const [isDragging, setIsDragging] = useState(false);
+  const [reportDate, setReportDate] = useState(''); // Date input state
   const fileInputRef = useRef(null);
   const folderInputRef = useRef(null);
 
@@ -19,6 +20,11 @@ export default function UploadSection({ onUploadSuccess }) {
     try {
       const formData = new FormData();
       formData.append('file', file);
+      
+      // Add report date if provided
+      if (reportDate) {
+        formData.append('reportDate', reportDate);
+      }
 
       const token = localStorage.getItem('token');
       const API_BASE = import.meta.env?.VITE_API_URL || 'http://localhost:5000/api';
@@ -191,6 +197,22 @@ export default function UploadSection({ onUploadSuccess }) {
         <p className={styles.uploadDescription}>
           Upload mutual fund portfolio Excel files (.xlsx, .xls)
         </p>
+        
+        {/* Report Date Input */}
+        <div className={styles.dateInputSection}>
+          <label htmlFor="reportDate" className={styles.dateLabel}>
+            📅 Portfolio Report Date <span className={styles.optional}>(Optional - will use date from file if not provided)</span>
+          </label>
+          <input
+            id="reportDate"
+            type="date"
+            value={reportDate}
+            onChange={(e) => setReportDate(e.target.value)}
+            className={styles.dateInput}
+            disabled={uploading}
+            placeholder="Select report date"
+          />
+        </div>
         
         {/* Drag and Drop Zone */}
         <div 

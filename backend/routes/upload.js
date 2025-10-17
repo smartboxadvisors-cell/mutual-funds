@@ -41,15 +41,28 @@ router.post('/', upload.single('file'), async (req, res) => {
     // Parse Excel file from buffer
     const parseResult = parseExcelFile(fileBuffer);
     
+    // Use reportDate from form if provided, otherwise use date from Excel file
+    let finalReportDate = parseResult.reportDate;
+    if (req.body.reportDate) {
+      try {
+        finalReportDate = new Date(req.body.reportDate);
+        console.log(`📅 Using user-provided report date: ${finalReportDate.toISOString()}`);
+      } catch (e) {
+        console.warn(`⚠️  Invalid date format from form: ${req.body.reportDate}, using Excel date instead`);
+      }
+    } else {
+      console.log(`📅 Using report date from Excel file: ${finalReportDate?.toISOString() || 'N/A'}`);
+    }
+    
     // Create or update scheme (upsert by name + reportDate)
     const scheme = await Scheme.findOneAndUpdate(
       { 
         name: parseResult.schemeName,
-        reportDate: parseResult.reportDate
+        reportDate: finalReportDate
       },
       {
         name: parseResult.schemeName,
-        reportDate: parseResult.reportDate,
+        reportDate: finalReportDate,
         originalFilename: req.file.originalname
       },
       { 

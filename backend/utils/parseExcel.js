@@ -223,21 +223,18 @@ const COLUMN_MAPPINGS = {
   ],
   issuer: [/issuer/i, /company/i],
   ytm: [
-    /^yield\s+of\s+the\s+instrument$/i,       // "Yield of the instrument" (ICICI - exact match)
-    /^yield\s*of\s*the\s*instrument$/i,       // "Yield of the instrument" (with flexible spacing)
-    /yield\s+of\s+the\s+instrument/i,         // "Yield of the instrument" (anywhere in header)
-    /^yield\s+of\s+instrument$/i,             // "Yield of instrument" (shortened)
-    /yield.*of.*the.*instrument/i,            // "Yield of the instrument" with extra text
-    /^ytm\s*%/i,                              // "YTM %"
-    /^ytm$/i,                                 // "YTM" alone
-    /^yield\s+to\s+maturity/i,                // "Yield to Maturity" (full form)
-    /yield.*to.*maturity/i,                   // "Yield to Maturity" with extra text
-    /yield.*instrument/i,                     // "Yield instrument"
-    /^yield$/i,                               // "YIELD" or "Yield" alone (case-insensitive)
-    /ytm/i,                                   // "YTM" anywhere
-    /^%\s*yield/i,                            // "% Yield"
-    /yield\s*%/i,                             // "Yield %"
-    /yield/i                                  // "Yield" anywhere (lowest priority)
+    /^yield\s+of\s+the\s+instrument$/i,       // "yield of the instrument" (ICICI - exact match after normalization)
+    /^yield\s+of\s+instrument$/i,             // "yield of instrument" (shortened)
+    /yield\s+of\s+the\s+instrument/i,         // "yield of the instrument" (anywhere in header)
+    /yield\s+instrument/i,                    // "yield instrument"
+    /^ytm\s+percent$/i,                       // "ytm percent"
+    /^ytm\s+%$/i,                             // "ytm %"
+    /^ytm$/i,                                 // "ytm" alone
+    /^yield\s+to\s+maturity$/i,               // "yield to maturity" (full form, exact)
+    /yield\s+to\s+maturity/i,                 // "yield to maturity" (anywhere)
+    /^yield$/i,                               // "yield" alone (case-insensitive)
+    /\bytm\b/i,                               // "ytm" as whole word
+    /\byield\b/i                              // "yield" as whole word (lowest priority)
   ],
   ytc: [
     /^~?ytc/i,                 // "~YTC" or "YTC"
@@ -518,6 +515,8 @@ function detectColumnHeaders(worksheet) {
         .replace(/[\r\n]+/g, ' ')           // Replace line breaks with spaces
         .replace(/\s+/g, ' ')                // Replace multiple spaces with single space
         .replace(/["""'']/g, '"')            // Normalize quotes
+        .replace(/[^a-z0-9\s]/gi, ' ')      // Remove special characters except spaces
+        .replace(/\s+/g, ' ')                // Collapse multiple spaces again
         .trim()
         .toLowerCase();
       
@@ -538,12 +537,25 @@ function detectColumnHeaders(worksheet) {
       }
       
       // Special debug for yield-related headers that weren't matched
-      if (value && /yield/i.test(value) && !rowHeaders.ytm) {
-        console.log(`⚠️  YIELD HEADER NOT MATCHED in column ${c}:`);
-        console.log(`   Original: "${value}"`);
-        console.log(`   Normalized: "${normalizedValue}"`);
-        console.log(`   Length: ${normalizedValue.length} chars`);
-        console.log(`   Char codes:`, Array.from(normalizedValue).map(ch => `${ch}(${ch.charCodeAt(0)})`).join(' '));
+      if (value && /yield/i.test(value)) {
+        if (!rowHeaders.ytm) {
+          console.log(`⚠️  YIELD HEADER NOT MATCHED in column ${c}:`);
+          console.log(`   Original: "${value}"`);
+          console.log(`   Normalized: "${normalizedValue}"`);
+          console.log(`   Length: ${normalizedValue.length} chars`);
+          
+          // Test against all YTM patterns to see which ones match
+          console.log(`   Testing against YTM patterns:`);
+          const ytmPatterns = COLUMN_MAPPINGS.ytm;
+          ytmPatterns.forEach((pattern, idx) => {
+            const matches = pattern.test(normalizedValue);
+            console.log(`     Pattern ${idx}: ${pattern} → ${matches ? '✅ MATCH' : '❌ no match'}`);
+          });
+        } else {
+          console.log(`✅ YIELD HEADER MATCHED in column ${c} as 'ytm'`);
+          console.log(`   Original: "${value}"`);
+          console.log(`   Normalized: "${normalizedValue}"`);
+        }
       }
     }
     
@@ -661,6 +673,11 @@ function parseExcelFile(filePathOrBuffer) {
         
         let value = cell.v;
         
+        // Handle dash/empty values for numeric fields (treat as null)
+        if (value === '—' || value === '-' || value === '–' || value === '−' || value === 'NA' || value === 'N/A') {
+          value = null;
+        }
+        
         // Special handling for percentage fields: navPercent, ytm, and ytc
         // Excel stores percentages as decimals ONLY if the cell is percentage-formatted
         // e.g., 7.21% is stored as 0.0721 if formatted as "%", otherwise as 7.21
@@ -675,10 +692,15 @@ function parseExcelFile(filePathOrBuffer) {
             console.log(`📊 Converted ${fieldName} from ${cell.v} to ${value} (Excel percentage format detected)`);
           }
           
-          // Special logging for ICICI yield values
-          if (fieldName === 'ytm' && r <= headerRowIndex + 5) {
-            console.log(`🏦 ICICI Row ${r} - Yield captured: ${value} (from "Yield of the instrument" column)`);
+          // Special logging for yield values (first 10 data rows)
+          if (fieldName === 'ytm' && r <= headerRowIndex + 10) {
+            console.log(`🏦 Row ${r} - YTM captured: ${value} (raw: ${cell.v}, type: ${typeof value})`);
           }
+        }
+        
+        // Log all YTM values being captured (even null ones) for debugging
+        if (fieldName === 'ytm' && r <= headerRowIndex + 10) {
+          console.log(`📊 Row ${r} - YTM field: value=${value}, type=${typeof value}, original cell=${cell.v}`);
         }
         
         rowData[fieldName] = value;
