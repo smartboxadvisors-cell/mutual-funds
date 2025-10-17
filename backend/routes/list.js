@@ -21,6 +21,7 @@ const PROJECTION = {
   rating: 1,
   sector: 1,
   issuer: 1,
+  reportDate: 1, // Report date stored with each holding
   other: 1,
   createdAt: 1,
   updatedAt: 1
@@ -293,6 +294,9 @@ router.get('/imports', async (req, res) => {
     const transformedItems = items.map((item) => {
       const issuerInfo = issuerMap[item.isin] || {};
       
+      // Use reportDate directly from holding (priority) or fallback to scheme reportDate
+      const reportDate = item.reportDate || item.schemeId?.reportDate;
+      
       return {
         _id: item._id,
         scheme_name: item.schemeId?.name || '',
@@ -300,8 +304,8 @@ router.get('/imports', async (req, res) => {
         quantity: item.quantity,
         pct_to_nav: item.navPercent,
         market_value: item.marketValue,
-        report_date: item.schemeId?.reportDate
-          ? new Date(item.schemeId.reportDate).toLocaleDateString()
+        report_date: reportDate
+          ? new Date(reportDate).toLocaleDateString()
           : '',
         isin: item.isin,
         rating: issuerInfo.rating || item.rating,
@@ -621,6 +625,9 @@ router.get('/investor-data', async (req, res) => {
       // Create unique key: ISIN + Scheme + Instrument
       const uniqueKey = `${item.isin || 'N/A'}_${item.schemeId?._id || 'unknown'}_${item.instrumentName || 'N/A'}`;
       
+      // Use reportDate directly from holding (priority) or fallback to scheme reportDate
+      const reportDate = item.reportDate || item.schemeId?.reportDate;
+      
       const transformed = {
         _id: item._id,
         issuer: issuerName,
@@ -630,8 +637,8 @@ router.get('/investor-data', async (req, res) => {
         quantity: item.quantity || 0,
         market_value: item.marketValue || 0,
         maturity_date: item.maturityDate ? new Date(item.maturityDate).toLocaleDateString() : 'N/A',
-        report_date: item.schemeId?.reportDate
-          ? new Date(item.schemeId.reportDate).toLocaleDateString()
+        report_date: reportDate
+          ? new Date(reportDate).toLocaleDateString()
           : '',
         rating: issuerInfo.rating || item.rating || 'N/A',
         ratingGroup: issuerInfo.ratingGroup || null,

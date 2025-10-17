@@ -45,6 +45,10 @@ const instrumentHoldingSchema = new mongoose.Schema({
   issuer: {
     type: String
   },
+  reportDate: {
+    type: Date,
+    index: true // Index for efficient filtering by date
+  },
   other: {
     type: Object, // For additional fields like YTM, etc.
     default: {}

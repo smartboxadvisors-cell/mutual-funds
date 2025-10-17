@@ -135,6 +135,7 @@ router.post('/', upload.single('file'), async (req, res) => {
       rating: item.rating || null,
       sector: item.sector || null,
       issuer: item.issuer || null,
+      reportDate: finalReportDate, // Store report date with each holding
       other: {
         YTM: safeNumber(item.ytm),
         YTC: safeNumber(item.ytc), // Yield to Call (for AT1/Tier 2 bonds)
@@ -143,10 +144,11 @@ router.post('/', upload.single('file'), async (req, res) => {
     }));
 
     // Log first 3 holdings with YTM data for ICICI verification
-    console.log('\n📊 SAVING TO DATABASE - First 3 holdings with YTM:');
+    console.log('\n📊 SAVING TO DATABASE - First 3 holdings with YTM and Report Date:');
     holdings.slice(0, 3).forEach((holding, idx) => {
       console.log(`\n${idx + 1}. Instrument: ${holding.instrumentName}`);
       console.log(`   ISIN: ${holding.isin}`);
+      console.log(`   Report Date: ${holding.reportDate ? holding.reportDate.toISOString().split('T')[0] : 'N/A'}`);
       console.log(`   YTM from Excel: ${parseResult.data[idx]?.ytm || 'N/A'}`);
       console.log(`   YTM after safeNumber: ${holding.other.YTM || 'N/A'}`);
       console.log(`   Will be stored as: other.YTM = ${holding.other.YTM}`);
