@@ -246,6 +246,8 @@ function detectSchemeInfo(worksheet) {
   const range = XLSX.utils.decode_range(worksheet['!ref']);
   let schemeName = '';
   let reportDate = null;
+  let isICICI = false;
+  let firstLineValue = '';
   
   // Check first 10 rows for scheme name and date
   for (let r = 0; r < Math.min(10, range.e.r + 1); r++) {
@@ -259,6 +261,17 @@ function detectSchemeInfo(worksheet) {
       // Skip empty values
       if (!value) continue;
       
+      // Store first line to detect ICICI format
+      if (r === 0 && !firstLineValue) {
+        firstLineValue = value;
+        // Detect ICICI format: first line is just "ICICI Prudential Mutual Fund"
+        if (/^ICICI\s+Prudential\s+Mutual\s+Fund$/i.test(value)) {
+          isICICI = true;
+          console.log('🏦 Detected ICICI format - will use second line as scheme name');
+          continue; // Skip this line, don't use as scheme name
+        }
+      }
+      
       // Detect scheme name patterns (priority order)
       // Pattern 1: "SCHEME NAME: SBI Short Term Debt Fund"
       if (/scheme\s*name\s*:/i.test(value)) {
@@ -267,6 +280,11 @@ function detectSchemeInfo(worksheet) {
       // Pattern 2: Text containing mutual fund keywords (most common format)
       // Examples: "Nippon India Corporate Bond Fund", "HDFC Ultra Short Term Fund", "DSP Liquidity Fund"
       else if (!schemeName && r <= 2) { // Only check first 3 rows
+        // For ICICI format: skip first line (fund house name), use second line (scheme name)
+        if (isICICI && r === 0) {
+          continue; // Skip first line for ICICI
+        }
+        
         // Check if it contains fund-related keywords
         const isFundName = /fund|mutual\s*fund|scheme/i.test(value);
         
@@ -294,6 +312,9 @@ function detectSchemeInfo(worksheet) {
             .trim();
           
           schemeName = cleanedName;
+          if (isICICI) {
+            console.log(`✅ ICICI scheme name from line ${r + 1}: "${schemeName}"`);
+          }
         }
       }
       
