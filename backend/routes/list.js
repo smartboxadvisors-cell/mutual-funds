@@ -472,39 +472,49 @@ router.get('/investor-data', async (req, res) => {
     const skip = (page - 1) * limit;
     const issuerSearch = req.query.issuer || '';
 
-    // Step 1: Find matching issuers from both Issuer and MasterRating collections
+    // Step 1: Determine if search is an ISIN or issuer name
+    const searchTerm = issuerSearch.trim();
+    const isISINSearch = /^[A-Z]{2}[A-Z0-9]{9}[0-9]$/i.test(searchTerm);
+    
     let matchingIsins = [];
-    if (issuerSearch.trim()) {
-      const searchRegex = { $regex: escapeRegex(issuerSearch.trim()), $options: 'i' };
-      
-      // Search in Issuer model (company field)
-      const matchingIssuersFromIssuer = await Issuer.find({
-        company: searchRegex,
-      })
-        .select('isin company')
-        .lean();
-      
-      // Search in MasterRating model (issuerName field)
-      const matchingIssuersFromRating = await MasterRating.find({
-        issuerName: searchRegex,
-      })
-        .select('isin issuerName')
-        .lean();
-      
-      // Combine ISINs from both sources
-      const isinsFromIssuer = matchingIssuersFromIssuer.map(issuer => issuer.isin);
-      const isinsFromRating = matchingIssuersFromRating.map(issuer => issuer.isin);
-      matchingIsins = [...new Set([...isinsFromIssuer, ...isinsFromRating])];
-      
-      // If no matching issuers found, return empty result
-      if (matchingIsins.length === 0) {
-        return res.json({
-          page,
-          limit,
-          total: 0,
-          totalPages: 1,
-          items: [],
-        });
+    
+    if (searchTerm) {
+      if (isISINSearch) {
+        // Direct ISIN search - just use the ISIN
+        matchingIsins = [searchTerm.toUpperCase()];
+      } else {
+        // Issuer name search - find matching ISINs from master data
+        const searchRegex = { $regex: escapeRegex(searchTerm), $options: 'i' };
+        
+        // Search in Issuer model (company field)
+        const matchingIssuersFromIssuer = await Issuer.find({
+          company: searchRegex,
+        })
+          .select('isin company')
+          .lean();
+        
+        // Search in MasterRating model (issuerName field)
+        const matchingIssuersFromRating = await MasterRating.find({
+          issuerName: searchRegex,
+        })
+          .select('isin issuerName')
+          .lean();
+        
+        // Combine ISINs from both sources
+        const isinsFromIssuer = matchingIssuersFromIssuer.map(issuer => issuer.isin);
+        const isinsFromRating = matchingIssuersFromRating.map(issuer => issuer.isin);
+        matchingIsins = [...new Set([...isinsFromIssuer, ...isinsFromRating])];
+        
+        // If no matching issuers found, return empty result
+        if (matchingIsins.length === 0) {
+          return res.json({
+            page,
+            limit,
+            total: 0,
+            totalPages: 1,
+            items: [],
+          });
+        }
       }
     }
 
@@ -514,7 +524,7 @@ router.get('/investor-data', async (req, res) => {
       filter.isin = { $in: matchingIsins };
     }
     // If no search term, show all (or we could filter for only items with ISIN)
-    if (!issuerSearch.trim()) {
+    if (!searchTerm) {
       filter.isin = { $exists: true, $ne: null, $ne: '' };
     }
 

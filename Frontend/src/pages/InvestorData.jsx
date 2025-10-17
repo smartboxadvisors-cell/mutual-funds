@@ -111,11 +111,22 @@ export default function InvestorData() {
   };
 
   const handleIsinClick = (isin) => {
+    if (!isin || isin === 'N/A') return;
     setIssuerSearch(isin);
     setShowSuggestions(false);
     setPage(1);
     setSearchMode('isin');
     loadData(1, isin);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
+  const handleIssuerClick = (issuer) => {
+    if (!issuer || issuer === 'N/A') return;
+    setIssuerSearch(issuer);
+    setShowSuggestions(false);
+    setPage(1);
+    setSearchMode('issuer');
+    loadData(1, issuer);
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
@@ -250,8 +261,8 @@ export default function InvestorData() {
             <table className={styles.table}>
               <thead>
                 <tr>
+                  {searchMode === 'issuer' && <th>ISIN</th>}
                   {searchMode === 'isin' && <th>Issuer</th>}
-                  <th>ISIN</th>
                   <th>Scheme Name</th>
                   <th>Instrument Name</th>
                   <th>Quantity</th>
@@ -266,23 +277,33 @@ export default function InvestorData() {
               <tbody>
                 {data.map((item) => (
                   <tr key={item._id}>
-                    {searchMode === 'isin' && (
-                      <td>
-                        <strong>{item.issuer}</strong>
+                    {searchMode === 'issuer' && (
+                      <td 
+                        style={{ 
+                          cursor: 'pointer', 
+                          color: '#4c51bf',
+                          fontFamily: 'monospace',
+                          fontWeight: 500
+                        }}
+                        onClick={() => handleIsinClick(item.isin)}
+                        title="Click to see all schemes with this ISIN"
+                      >
+                        {item.isin}
                       </td>
                     )}
-                    <td 
-                      style={{ 
-                        cursor: 'pointer', 
-                        color: '#4c51bf',
-                        textDecoration: 'underline',
-                        fontFamily: 'monospace'
-                      }}
-                      onClick={() => handleIsinClick(item.isin)}
-                      title="Click to see all schemes with this ISIN"
-                    >
-                      {item.isin}
-                    </td>
+                    {searchMode === 'isin' && (
+                      <td 
+                        style={{ 
+                          cursor: 'pointer', 
+                          color: '#4c51bf',
+                          fontWeight: 600
+                        }}
+                        onClick={() => handleIssuerClick(item.issuer)}
+                        title="Click to see all holdings from this Issuer"
+                      >
+                        {item.issuer}
+                      </td>
+                    )}
                     <td>{item.scheme_name}</td>
                     <td>{item.instrument_name}</td>
                     <td>{item.quantity ? item.quantity.toLocaleString() : '0'}</td>
