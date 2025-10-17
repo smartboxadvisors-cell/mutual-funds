@@ -16,6 +16,9 @@ export default function InvestorData() {
   const [issuerSuggestions, setIssuerSuggestions] = useState([]);
   const [showSuggestions, setShowSuggestions] = useState(false);
   
+  // Track if we're in ISIN mode (clicked from ISIN)
+  const [searchMode, setSearchMode] = useState('issuer'); // 'issuer' or 'isin'
+  
   const suggestionRef = useRef(null);
   const debouncedIssuerSearch = useDebounce(issuerSearch, 300);
 
@@ -96,13 +99,24 @@ export default function InvestorData() {
     setIssuerSearch('');
     setPage(1);
     setShowSuggestions(false);
+    setSearchMode('issuer');
   };
 
   const handleSuggestionClick = (issuer) => {
     setIssuerSearch(issuer);
     setShowSuggestions(false);
     setPage(1);
+    setSearchMode('issuer');
     loadData(1, issuer);
+  };
+
+  const handleIsinClick = (isin) => {
+    setIssuerSearch(isin);
+    setShowSuggestions(false);
+    setPage(1);
+    setSearchMode('isin');
+    loadData(1, isin);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
   const handlePageChange = (newPage) => {
@@ -126,7 +140,7 @@ export default function InvestorData() {
       <div className={styles.header}>
         <h1 className={styles.title}>Investor Data</h1>
         <p className={styles.subtitle}>
-          Search and view issuer information including ISIN, scheme, quantity, market value, and maturity dates
+          Search and view issuer information including ISIN, scheme, quantity, market value, and ratings. Click any ISIN to see all holdings across schemes.
         </p>
       </div>
 
@@ -135,15 +149,18 @@ export default function InvestorData() {
         <div className={styles.searchBox}>
           <div className={styles.searchFieldWrapper} ref={suggestionRef}>
             <div className={styles.searchField}>
-              <label className={styles.searchLabel}>Search by Issuer Name</label>
+              <label className={styles.searchLabel}>
+                {searchMode === 'isin' ? 'Viewing by ISIN' : 'Search by Issuer Name or ISIN'}
+              </label>
               <input
                 type="text"
                 className={styles.searchInput}
-                placeholder="e.g., Aditya Birla"
+                placeholder={searchMode === 'isin' ? "ISIN: Click ISIN below to change" : "e.g., Aditya Birla or IN0020240126"}
                 value={issuerSearch}
                 onChange={(e) => {
                   setIssuerSearch(e.target.value);
                   setShowSuggestions(true);
+                  setSearchMode('issuer');
                 }}
                 onKeyPress={handleKeyPress}
                 onFocus={() => setShowSuggestions(true)}
@@ -233,7 +250,7 @@ export default function InvestorData() {
             <table className={styles.table}>
               <thead>
                 <tr>
-                  <th>Issuer</th>
+                  {searchMode === 'isin' && <th>Issuer</th>}
                   <th>ISIN</th>
                   <th>Scheme Name</th>
                   <th>Instrument Name</th>
@@ -241,8 +258,6 @@ export default function InvestorData() {
                   <th>Market Value (₹ L)</th>
                   <th>% to NAV</th>
                   <th>Coupon</th>
-                  <th>Maturity Date</th>
-                  <th>Report Date</th>
                   <th>Rating</th>
                   <th>Sector</th>
                   <th>Type</th>
@@ -251,10 +266,23 @@ export default function InvestorData() {
               <tbody>
                 {data.map((item) => (
                   <tr key={item._id}>
-                    <td>
-                      <strong>{item.issuer}</strong>
+                    {searchMode === 'isin' && (
+                      <td>
+                        <strong>{item.issuer}</strong>
+                      </td>
+                    )}
+                    <td 
+                      style={{ 
+                        cursor: 'pointer', 
+                        color: '#4c51bf',
+                        textDecoration: 'underline',
+                        fontFamily: 'monospace'
+                      }}
+                      onClick={() => handleIsinClick(item.isin)}
+                      title="Click to see all schemes with this ISIN"
+                    >
+                      {item.isin}
                     </td>
-                    <td>{item.isin}</td>
                     <td>{item.scheme_name}</td>
                     <td>{item.instrument_name}</td>
                     <td>{item.quantity ? item.quantity.toLocaleString() : '0'}</td>
@@ -269,8 +297,6 @@ export default function InvestorData() {
                     <td>
                       {item.coupon ? item.coupon.toFixed(2) + '%' : '-'}
                     </td>
-                    <td>{item.maturity_date}</td>
-                    <td>{item.report_date}</td>
                     <td>
                       {item.rating !== 'N/A' && (
                         <div>
