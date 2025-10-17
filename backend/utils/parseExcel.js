@@ -223,16 +223,21 @@ const COLUMN_MAPPINGS = {
   ],
   issuer: [/issuer/i, /company/i],
   ytm: [
-    /^yield\s*of\s*the\s*instrument$/i,  // "Yield of the instrument" (ICICI format - HIGHEST PRIORITY)
-    /yield.*of.*the.*instrument/i,       // "Yield of the instrument" with extra text
-    /^ytm\s*%/i,                          // "YTM %"
-    /^ytm$/i,                             // "YTM" alone
-    /yield.*instrument/i,                 // "Yield instrument"
-    /^yield$/i,                           // "YIELD" or "Yield" alone (case-insensitive)
-    /ytm/i,                               // "YTM" anywhere
-    /^%\s*yield/i,                        // "% Yield"
-    /yield\s*%/i,                         // "Yield %"
-    /yield/i                              // "Yield" anywhere (lowest priority)
+    /^yield\s+of\s+the\s+instrument$/i,       // "Yield of the instrument" (ICICI - exact match)
+    /^yield\s*of\s*the\s*instrument$/i,       // "Yield of the instrument" (with flexible spacing)
+    /yield\s+of\s+the\s+instrument/i,         // "Yield of the instrument" (anywhere in header)
+    /^yield\s+of\s+instrument$/i,             // "Yield of instrument" (shortened)
+    /yield.*of.*the.*instrument/i,            // "Yield of the instrument" with extra text
+    /^ytm\s*%/i,                              // "YTM %"
+    /^ytm$/i,                                 // "YTM" alone
+    /^yield\s+to\s+maturity/i,                // "Yield to Maturity" (full form)
+    /yield.*to.*maturity/i,                   // "Yield to Maturity" with extra text
+    /yield.*instrument/i,                     // "Yield instrument"
+    /^yield$/i,                               // "YIELD" or "Yield" alone (case-insensitive)
+    /ytm/i,                                   // "YTM" anywhere
+    /^%\s*yield/i,                            // "% Yield"
+    /yield\s*%/i,                             // "Yield %"
+    /yield/i                                  // "Yield" anywhere (lowest priority)
   ],
   ytc: [
     /^~?ytc/i,                 // "~YTC" or "YTC"
@@ -526,8 +531,19 @@ function detectColumnHeaders(worksheet) {
           // Special logging for ICICI yield column
           if (fieldName === 'ytm' && /yield.*of.*the.*instrument/i.test(normalizedValue)) {
             console.log('🏦 ICICI YIELD COLUMN DETECTED: Will extract yield from "Yield of the instrument" column');
+            console.log('🏦 Original header text:', value);
+            console.log('🏦 Normalized header text:', normalizedValue);
           }
         }
+      }
+      
+      // Special debug for yield-related headers that weren't matched
+      if (value && /yield/i.test(value) && !rowHeaders.ytm) {
+        console.log(`⚠️  YIELD HEADER NOT MATCHED in column ${c}:`);
+        console.log(`   Original: "${value}"`);
+        console.log(`   Normalized: "${normalizedValue}"`);
+        console.log(`   Length: ${normalizedValue.length} chars`);
+        console.log(`   Char codes:`, Array.from(normalizedValue).map(ch => `${ch}(${ch.charCodeAt(0)})`).join(' '));
       }
     }
     
