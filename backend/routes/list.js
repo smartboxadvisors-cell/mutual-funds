@@ -601,6 +601,12 @@ router.get('/investor-data', async (req, res) => {
     
     items.forEach((item) => {
       const issuerInfo = issuerMap[item.isin] || {};
+      const schemeName = item.schemeId?.name || '';
+      
+      // Skip entries with "Unknown Scheme"
+      if (schemeName.toLowerCase().includes('unknown scheme') || !schemeName.trim()) {
+        return;
+      }
       
       // Create unique key: ISIN + Scheme + Instrument
       const uniqueKey = `${item.isin || 'N/A'}_${item.schemeId?._id || 'unknown'}_${item.instrumentName || 'N/A'}`;
@@ -608,7 +614,7 @@ router.get('/investor-data', async (req, res) => {
       const transformed = {
         _id: item._id,
         issuer: issuerInfo.company || item.issuer || 'N/A',
-        scheme_name: item.schemeId?.name || '',
+        scheme_name: schemeName,
         instrument_name: item.instrumentName || '',
         isin: item.isin || 'N/A',
         quantity: item.quantity || 0,
