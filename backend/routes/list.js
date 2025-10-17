@@ -602,9 +602,19 @@ router.get('/investor-data', async (req, res) => {
     items.forEach((item) => {
       const issuerInfo = issuerMap[item.isin] || {};
       const schemeName = item.schemeId?.name || '';
+      const issuerName = issuerInfo.company || item.issuer || 'N/A';
       
       // Skip entries with "Unknown Scheme"
       if (schemeName.toLowerCase().includes('unknown scheme') || !schemeName.trim()) {
+        return;
+      }
+      
+      // Skip entries with invalid issuer names
+      if (issuerName === 'N/A' || 
+          issuerName.toLowerCase() === 'n/a' || 
+          issuerName.includes('GOI ') || 
+          issuerName.includes('GOV') ||
+          !issuerName.trim()) {
         return;
       }
       
@@ -613,7 +623,7 @@ router.get('/investor-data', async (req, res) => {
       
       const transformed = {
         _id: item._id,
-        issuer: issuerInfo.company || item.issuer || 'N/A',
+        issuer: issuerName,
         scheme_name: schemeName,
         instrument_name: item.instrumentName || '',
         isin: item.isin || 'N/A',
