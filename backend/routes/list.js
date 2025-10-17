@@ -596,20 +596,16 @@ router.get('/investor-data', async (req, res) => {
       });
     }
 
-    // Step 4: Transform items with issuer data from master list
-    const transformedItems = items.map((item) => {
+    // Step 4: Transform and deduplicate items with issuer data from master list
+    const transformedMap = new Map();
+    
+    items.forEach((item) => {
       const issuerInfo = issuerMap[item.isin] || {};
       
-      // Debug first item
-      if (items.indexOf(item) === 0) {
-        console.log(`[Investor Data] First transformed item:`, {
-          isin: item.isin,
-          issuerFromMap: issuerInfo.company,
-          issuerFromItem: item.issuer
-        });
-      }
+      // Create unique key: ISIN + Scheme + Instrument
+      const uniqueKey = `${item.isin || 'N/A'}_${item.schemeId?._id || 'unknown'}_${item.instrumentName || 'N/A'}`;
       
-      return {
+      const transformed = {
         _id: item._id,
         issuer: issuerInfo.company || item.issuer || 'N/A',
         scheme_name: item.schemeId?.name || '',
@@ -628,15 +624,27 @@ router.get('/investor-data', async (req, res) => {
         pct_to_nav: item.navPercent || 0,
         coupon: item.coupon || null,
       };
+      
+      // If duplicate exists, aggregate quantities and market values
+      if (transformedMap.has(uniqueKey)) {
+        const existing = transformedMap.get(uniqueKey);
+        existing.quantity += transformed.quantity;
+        existing.market_value += transformed.market_value;
+        // Keep other properties from first occurrence
+      } else {
+        transformedMap.set(uniqueKey, transformed);
+      }
     });
     
-    console.log(`[Investor Data] Returning ${transformedItems.length} transformed items`);
+    const transformedItems = Array.from(transformedMap.values());
+    
+    console.log(`[Investor Data] Returning ${transformedItems.length} transformed items (deduplicated from ${items.length})`);
 
     res.json({
       page,
       limit,
-      total,
-      totalPages: Math.max(1, Math.ceil(total / limit)),
+      total: transformedItems.length,
+      totalPages: Math.max(1, Math.ceil(transformedItems.length / limit)),
       items: transformedItems,
       debug: {
         totalIsins: isins.length,
