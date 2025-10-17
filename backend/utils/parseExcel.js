@@ -555,7 +555,32 @@ function detectColumnHeaders(worksheet) {
     // Require at least 2 columns (was 3) to be more lenient with smaller files
     if (headerCount >= 2) {
       Object.assign(columnMap, rowHeaders);
-      console.log(`🎯 Header row found at index ${r} with ${headerCount} columns`);
+      console.log(`\n${'='.repeat(80)}`);
+      console.log(`🎯 HEADER ROW FOUND at index ${r} with ${headerCount} matched columns`);
+      console.log(`${'='.repeat(80)}`);
+      
+      // Show ALL headers in this row (matched and unmatched)
+      console.log(`\n📋 ALL COLUMN HEADERS IN THIS ROW:`);
+      rowValues.forEach((val, idx) => {
+        if (val && val !== '(empty)') {
+          const isMapped = Object.values(rowHeaders).includes(idx);
+          const mappedAs = Object.keys(rowHeaders).find(key => rowHeaders[key] === idx);
+          console.log(`   Column ${idx}: "${val}" ${isMapped ? `✅ → ${mappedAs}` : '❌ not mapped'}`);
+        }
+      });
+      
+      console.log(`\n📊 COMPLETE COLUMN MAPPING:`);
+      console.log(JSON.stringify(columnMap, null, 2));
+      
+      // Check if YTM column was detected
+      if (columnMap.ytm !== undefined) {
+        console.log(`\n✅ YTM COLUMN DETECTED at column ${columnMap.ytm}`);
+      } else {
+        console.log(`\n❌ YTM COLUMN NOT DETECTED - Yield values will NOT be extracted!`);
+        console.log(`   💡 Looking for headers like: "Yield of the instrument", "YTM", "Yield", etc.`);
+      }
+      console.log(`${'='.repeat(80)}\n`);
+      
       return { columnMap, headerRowIndex: r };
     }
   }
