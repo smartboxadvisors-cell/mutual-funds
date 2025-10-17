@@ -272,24 +272,47 @@ router.get('/imports', async (req, res) => {
       InstrumentHolding.countDocuments(filter),
     ]);
 
-    const transformedItems = items.map((item) => ({
-      _id: item._id,
-      scheme_name: item.schemeId?.name || '',
-      instrument_name: item.instrumentName || '',
-      quantity: item.quantity,
-      pct_to_nav: item.navPercent,
-      market_value: item.marketValue,
-      report_date: item.schemeId?.reportDate
-        ? new Date(item.schemeId.reportDate).toLocaleDateString()
-        : '',
-      isin: item.isin,
-      rating: item.rating,
-      ytm: item.other?.YTM || null,
-      _modifiedTime: item.updatedAt,
-      instrumentType: item.instrumentType,
-      sector: item.sector,
-      issuer: item.issuer,
-    }));
+    // Enrich with issuer names from MasterRating
+    const isins = [...new Set(items.map(item => item.isin).filter(Boolean))];
+    const issuerMap = {};
+    
+    if (isins.length > 0) {
+      const masterRatings = await MasterRating.find({ isin: { $in: isins } })
+        .select('isin issuerName rating ratingGroup')
+        .lean();
+      
+      masterRatings.forEach(mr => {
+        issuerMap[mr.isin] = {
+          issuerName: mr.issuerName,
+          rating: mr.rating,
+          ratingGroup: mr.ratingGroup,
+        };
+      });
+    }
+
+    const transformedItems = items.map((item) => {
+      const issuerInfo = issuerMap[item.isin] || {};
+      
+      return {
+        _id: item._id,
+        scheme_name: item.schemeId?.name || '',
+        instrument_name: item.instrumentName || '',
+        quantity: item.quantity,
+        pct_to_nav: item.navPercent,
+        market_value: item.marketValue,
+        report_date: item.schemeId?.reportDate
+          ? new Date(item.schemeId.reportDate).toLocaleDateString()
+          : '',
+        isin: item.isin,
+        rating: issuerInfo.rating || item.rating,
+        ytm: item.other?.YTM || null,
+        _modifiedTime: item.updatedAt,
+        instrumentType: item.instrumentType,
+        sector: item.sector,
+        issuer: issuerInfo.issuerName || item.issuer || 'N/A',
+        ratingGroup: issuerInfo.ratingGroup || null,
+      };
+    });
 
     res.json({
       page,
