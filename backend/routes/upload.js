@@ -35,23 +35,33 @@ router.post('/', upload.single('file'), async (req, res) => {
       return res.status(400).json({ error: 'No file uploaded' });
     }
 
+    // Check if reportDate is provided (MANDATORY)
+    if (!req.body.reportDate || req.body.reportDate.trim() === '') {
+      return res.status(400).json({ 
+        error: 'Portfolio Report Date is required. Please select a date before uploading.' 
+      });
+    }
+
     // Use buffer from memory storage (Vercel-compatible)
     const fileBuffer = req.file.buffer;
     
     // Parse Excel file from buffer
     const parseResult = parseExcelFile(fileBuffer);
     
-    // Use reportDate from form if provided, otherwise use date from Excel file
-    let finalReportDate = parseResult.reportDate;
-    if (req.body.reportDate) {
-      try {
-        finalReportDate = new Date(req.body.reportDate);
-        console.log(`📅 Using user-provided report date: ${finalReportDate.toISOString()}`);
-      } catch (e) {
-        console.warn(`⚠️  Invalid date format from form: ${req.body.reportDate}, using Excel date instead`);
+    // Use reportDate from form (MANDATORY - validated above)
+    let finalReportDate;
+    try {
+      finalReportDate = new Date(req.body.reportDate);
+      if (isNaN(finalReportDate.getTime())) {
+        return res.status(400).json({ 
+          error: 'Invalid date format. Please provide a valid date.' 
+        });
       }
-    } else {
-      console.log(`📅 Using report date from Excel file: ${finalReportDate?.toISOString() || 'N/A'}`);
+      console.log(`📅 Using user-provided report date: ${finalReportDate.toISOString()}`);
+    } catch (e) {
+      return res.status(400).json({ 
+        error: 'Invalid date format. Please provide a valid date.' 
+      });
     }
     
     // Create or update scheme (upsert by name + reportDate)

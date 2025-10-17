@@ -47,6 +47,7 @@ const instrumentHoldingSchema = new mongoose.Schema({
   },
   reportDate: {
     type: Date,
+    required: true, // Mandatory field
     index: true // Index for efficient filtering by date
   },
   other: {

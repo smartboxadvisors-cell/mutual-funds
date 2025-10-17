@@ -6,7 +6,11 @@ export default function UploadSection({ onUploadSuccess }) {
   const [uploading, setUploading] = useState(false);
   const [uploadQueue, setUploadQueue] = useState([]);
   const [isDragging, setIsDragging] = useState(false);
-  const [reportDate, setReportDate] = useState(''); // Date input state
+  // Set today's date as default in YYYY-MM-DD format
+  const [reportDate, setReportDate] = useState(() => {
+    const today = new Date();
+    return today.toISOString().split('T')[0];
+  });
   const fileInputRef = useRef(null);
   const folderInputRef = useRef(null);
 
@@ -82,6 +86,12 @@ export default function UploadSection({ onUploadSuccess }) {
 
   // Process all files in queue
   const processQueue = async (files) => {
+    // Check if report date is selected
+    if (!reportDate || reportDate.trim() === '') {
+      alert('⚠️ Please select a Portfolio Report Date before uploading files.');
+      return;
+    }
+    
     // Filter Excel files only
     const excelFiles = Array.from(files).filter(file => {
       const ext = file.name.toLowerCase().substring(file.name.lastIndexOf('.'));
@@ -201,7 +211,7 @@ export default function UploadSection({ onUploadSuccess }) {
         {/* Report Date Input */}
         <div className={styles.dateInputSection}>
           <label htmlFor="reportDate" className={styles.dateLabel}>
-            📅 Portfolio Report Date <span className={styles.optional}>(Optional - will use date from file if not provided)</span>
+            📅 Portfolio Report Date <span className={styles.required}>* (Required)</span>
           </label>
           <input
             id="reportDate"
@@ -210,8 +220,9 @@ export default function UploadSection({ onUploadSuccess }) {
             onChange={(e) => setReportDate(e.target.value)}
             className={styles.dateInput}
             disabled={uploading}
-            placeholder="Select report date"
+            required
           />
+          <p className={styles.dateNote}>Default: Today's date. Change if needed.</p>
         </div>
         
         {/* Drag and Drop Zone */}
