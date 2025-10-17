@@ -161,10 +161,17 @@ const COLUMN_MAPPINGS = {
     /grade/i
   ],
   quantity: [
-    /quantity/i, 
-    /qty/i, 
-    /units/i,
-    /no\s*of\s*units/i
+    /^quantity$/i,                    // "Quantity" (exact)
+    /^qty$/i,                         // "Qty" (exact)
+    /^units$/i,                       // "Units" (exact)
+    /^no\s+of\s+units$/i,             // "No of Units" (exact)
+    /^number\s+of\s+units$/i,         // "Number of Units" (exact)
+    /no\s+of\s+shares/i,              // "No of Shares"
+    /number\s+of\s+shares/i,          // "Number of Shares"
+    /quantity/i,                      // "Quantity" (anywhere)
+    /qty/i,                           // "Qty" (anywhere)
+    /units/i,                         // "Units" (anywhere)
+    /\bqty\b/i                        // "qty" as whole word
   ],
   marketValue: [
     /market\s*\/\s*fair\s*value.*rs.*lacs/i,     // "Market/ Fair Value (Rs. in Lacs.)"
@@ -185,21 +192,30 @@ const COLUMN_MAPPINGS = {
     /amount/i
   ],
   navPercent: [
-    /^%\s*to\s*nav\b/i,               // "% to NAV" (strict - most specific first)
-    /^%\s*to\s*aum\b/i,               // "% to AUM" (strict)
-    /^%\s*to\s*net\s*assets?\b/i,     // "% to Net Assets" (strict)
-    /%\s*to\s*nav\b/i,                // "% to NAV" (looser)
-    /%\s*to\s*aum\b/i,                // "% to AUM" (looser)
-    /%\s*to\s*net\s*assets?/i,        // "% to Net Assets"
-    /%.*net.*asset/i,                 // "% Net Assets"
-    /rounded.*%.*nav/i,               // "Rounded % to NAV"
-    /rounded.*%.*net.*asset/i,        // "Rounded % to Net Assets"
-    /rounded.*%/i,                    // "Rounded %"
-    /percent.*to.*nav/i,              // "Percent to NAV"
-    /percent.*to.*aum/i,              // "Percent to AUM"
-    /percent.*net.*asset/i,           // "Percent to Net Assets"
-    /weight/i                         // Weight
-    // NOTE: Removed generic patterns to avoid false matches
+    /^%\s*to\s*nav$/i,                    // "% to NAV" (exact)
+    /^%\s*to\s*aum$/i,                    // "% to AUM" (exact)
+    /^%\s*to\s*net\s*assets?$/i,          // "% to Net Assets" (exact)
+    /^%\s+to\s+nav$/i,                    // "% to NAV" (with spaces)
+    /^%\s+to\s+aum$/i,                    // "% to AUM" (with spaces)
+    /^\%\s+of\s+nav$/i,                   // "% of NAV"
+    /^percent\s+to\s+nav$/i,              // "percent to NAV"
+    /^percent\s+of\s+nav$/i,              // "percent of NAV"
+    /%\s*to\s*nav/i,                      // "% to NAV" (anywhere)
+    /%\s*to\s*aum/i,                      // "% to AUM" (anywhere)
+    /%\s*to\s*net\s*assets?/i,            // "% to Net Assets"
+    /%\s*of\s*nav/i,                      // "% of NAV"
+    /%\s*of\s*aum/i,                      // "% of AUM"
+    /%.*net.*asset/i,                     // "% Net Assets"
+    /percent\s+to\s+nav/i,                // "Percent to NAV"
+    /percent\s+to\s+aum/i,                // "Percent to AUM"
+    /percent\s+of\s+nav/i,                // "Percent of NAV"
+    /percent.*net.*asset/i,               // "Percent to Net Assets"
+    /rounded.*%.*nav/i,                   // "Rounded % to NAV"
+    /rounded.*%/i,                        // "Rounded %"
+    /^nav\s*%$/i,                         // "NAV %"
+    /^aum\s*%$/i,                         // "AUM %"
+    /weight/i,                            // "Weight"
+    /\bnav\s+percent\b/i                  // "NAV Percent"
   ],
   maturityDate: [
     /^maturity\s*date$/i,                // "Maturity Date" alone
@@ -210,10 +226,16 @@ const COLUMN_MAPPINGS = {
   coupon: [
     /^coupon\s*\(%\)$/i,                 // "Coupon (%)"
     /^coupon\s*%$/i,                     // "Coupon %"
-    /^coupon\s*rate?$/i,                 // "Coupon Rate" or "Coupon" alone
+    /^coupon\s+rate$/i,                  // "Coupon Rate"
     /^coupon$/i,                         // "Coupon" alone
-    /^rate\s*of\s*interest$/i,           // "Rate of Interest"
-    /^interest\s*rate$/i                 // "Interest Rate" alone
+    /^rate\s+of\s+interest$/i,           // "Rate of Interest"
+    /^interest\s+rate$/i,                // "Interest Rate"
+    /^interest\s*\(%\)$/i,               // "Interest (%)"
+    /^interest\s*%$/i,                   // "Interest %"
+    /coupon\s+rate/i,                    // "Coupon Rate" (anywhere)
+    /rate\s+of\s+interest/i,             // "Rate of Interest" (anywhere)
+    /interest\s+rate/i,                  // "Interest Rate" (anywhere)
+    /\bcoupon\b/i                        // "coupon" as whole word
   ],
   sector: [
     /sector/i, 
@@ -223,16 +245,25 @@ const COLUMN_MAPPINGS = {
   ],
   issuer: [/issuer/i, /company/i],
   ytm: [
-    /^yield\s+of\s+the\s+instrument$/i,       // "yield of the instrument" (ICICI - exact match after normalization)
+    /^yield\s+of\s+the\s+instrument$/i,       // "yield of the instrument" (exact)
     /^yield\s+of\s+instrument$/i,             // "yield of instrument" (shortened)
-    /yield\s+of\s+the\s+instrument/i,         // "yield of the instrument" (anywhere in header)
-    /yield\s+instrument/i,                    // "yield instrument"
+    /yield\s+of\s+the\s+instrument/i,         // "yield of the instrument" (anywhere)
+    /yield\s+of\s+instrument/i,               // "yield of instrument" (anywhere)
+    /^ytm\s*\(%\)$/i,                         // "YTM (%)"
     /^ytm\s+percent$/i,                       // "ytm percent"
-    /^ytm\s+%$/i,                             // "ytm %"
+    /^ytm\s*%$/i,                             // "ytm %" or "ytm%"
     /^ytm$/i,                                 // "ytm" alone
-    /^yield\s+to\s+maturity$/i,               // "yield to maturity" (full form, exact)
+    /^yield\s+to\s+maturity$/i,               // "yield to maturity" (exact)
     /yield\s+to\s+maturity/i,                 // "yield to maturity" (anywhere)
-    /^yield$/i,                               // "yield" alone (case-insensitive)
+    /^yield\s*\(%\)$/i,                       // "Yield (%)"
+    /^yield\s*%$/i,                           // "Yield %"
+    /^yield$/i,                               // "yield" alone
+    /^ytm\s+of\s+the\s+instrument$/i,         // "YTM of the instrument"
+    /^ytm\s+of\s+instrument$/i,               // "YTM of instrument"
+    /ytm\s+of\s+the\s+instrument/i,           // "YTM of the instrument" (anywhere)
+    /ytm\s+of\s+instrument/i,                 // "YTM of instrument" (anywhere)
+    /^%\s+yield$/i,                           // "% Yield"
+    /^yield\s+rate$/i,                        // "Yield Rate"
     /\bytm\b/i,                               // "ytm" as whole word
     /\byield\b/i                              // "yield" as whole word (lowest priority)
   ],
@@ -510,12 +541,12 @@ function detectColumnHeaders(worksheet) {
       // Skip empty cells for pattern matching
       if (!value) continue;
       
-      // Normalize the value: remove line breaks, extra spaces, and special formatting
+      // Normalize the value: preserve % and / for pattern matching
       const normalizedValue = value
         .replace(/[\r\n]+/g, ' ')           // Replace line breaks with spaces
         .replace(/\s+/g, ' ')                // Replace multiple spaces with single space
         .replace(/["""'']/g, '"')            // Normalize quotes
-        .replace(/[^a-z0-9\s]/gi, ' ')      // Remove special characters except spaces
+        .replace(/[^\w\s%\/\(\)]/gi, ' ')   // Remove special chars EXCEPT %, /, (, )
         .replace(/\s+/g, ' ')                // Collapse multiple spaces again
         .trim()
         .toLowerCase();
@@ -584,13 +615,27 @@ function detectColumnHeaders(worksheet) {
       console.log(`\n📊 COMPLETE COLUMN MAPPING:`);
       console.log(JSON.stringify(columnMap, null, 2));
       
-      // Check if YTM column was detected
-      if (columnMap.ytm !== undefined) {
-        console.log(`\n✅ YTM COLUMN DETECTED at column ${columnMap.ytm}`);
-      } else {
-        console.log(`\n❌ YTM COLUMN NOT DETECTED - Yield values will NOT be extracted!`);
-        console.log(`   💡 Looking for headers like: "Yield of the instrument", "YTM", "Yield", etc.`);
-      }
+      // Check which important columns were detected
+      console.log(`\n🔍 IMPORTANT COLUMNS STATUS:`);
+      const importantColumns = {
+        'instrumentName': '📄 Instrument Name',
+        'isin': '🔢 ISIN',
+        'quantity': '📊 Quantity',
+        'marketValue': '💰 Market Value',
+        'navPercent': '📈 % to NAV',
+        'ytm': '📉 YTM/Yield',
+        'rating': '⭐ Rating',
+        'coupon': '💵 Coupon'
+      };
+      
+      Object.entries(importantColumns).forEach(([key, label]) => {
+        if (columnMap[key] !== undefined) {
+          console.log(`   ✅ ${label} - Column ${columnMap[key]}`);
+        } else {
+          console.log(`   ❌ ${label} - NOT DETECTED`);
+        }
+      });
+      
       console.log(`${'='.repeat(80)}\n`);
       
       return { columnMap, headerRowIndex: r };
