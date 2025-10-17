@@ -857,6 +857,7 @@ export default function IssuerPortfolio() {
                               <th>Scheme</th>
                               <th>Instrument</th>
                               <th>ISIN</th>
+                              <th>Issuer</th>
                               <th>Rating</th>
                               <th>Instrument Type</th>
                               <th className="align-right">Market Value (Rs Lacs)</th>
@@ -886,8 +887,28 @@ export default function IssuerPortfolio() {
                                       <span className="issuer-badge">{holding.sector}</span>
                                     ) : null}
                                   </td>
-                                  <td className="issuer-table__cell--mono">
+                                  <td 
+                                    className="issuer-table__cell--mono"
+                                    style={{ 
+                                      cursor: 'pointer', 
+                                      color: '#4c51bf',
+                                      textDecoration: 'underline'
+                                    }}
+                                    onClick={() => setSearch(holding.isin || '')}
+                                    title="Click to filter by this ISIN"
+                                  >
                                     {holding.isin || "N/A"}
+                                  </td>
+                                  <td 
+                                    style={{ 
+                                      cursor: 'pointer', 
+                                      color: '#4c51bf',
+                                      fontWeight: 500
+                                    }}
+                                    onClick={() => setSearch(holding.issuer || '')}
+                                    title="Click to filter by this Issuer"
+                                  >
+                                    {holding.issuer || "N/A"}
                                   </td>
                                   <td>{holding.rating || "Unrated"}</td>
                                   <td>{holding.instrumentType || "Unclassified"}</td>
