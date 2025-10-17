@@ -521,6 +521,11 @@ function detectColumnHeaders(worksheet) {
           rowHeaders[fieldName] = c;
           headerCount++;
           console.log(`✅ Found header "${fieldName}" in column ${c}: "${value}" (normalized: "${normalizedValue}")`);
+          
+          // Special logging for ICICI yield column
+          if (fieldName === 'ytm' && /yield.*of.*the.*instrument/i.test(normalizedValue)) {
+            console.log('🏦 ICICI YIELD COLUMN DETECTED: Will extract yield from "Yield of the instrument" column');
+          }
         }
       }
     }
@@ -626,6 +631,11 @@ function parseExcelFile(filePathOrBuffer) {
           if (isPercentFormatted && value < 1 && value > 0) {
             value = value * 100;
             console.log(`📊 Converted ${fieldName} from ${cell.v} to ${value} (Excel percentage format detected)`);
+          }
+          
+          // Special logging for ICICI yield values
+          if (fieldName === 'ytm' && r <= headerRowIndex + 5) {
+            console.log(`🏦 ICICI Row ${r} - Yield captured: ${value} (from "Yield of the instrument" column)`);
           }
         }
         
