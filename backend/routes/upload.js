@@ -129,10 +129,21 @@ router.post('/', upload.single('file'), async (req, res) => {
       }
     }));
 
+    // Log first 3 holdings with YTM data for ICICI verification
+    console.log('\n📊 SAVING TO DATABASE - First 3 holdings with YTM:');
+    holdings.slice(0, 3).forEach((holding, idx) => {
+      console.log(`\n${idx + 1}. Instrument: ${holding.instrumentName}`);
+      console.log(`   ISIN: ${holding.isin}`);
+      console.log(`   YTM from Excel: ${parseResult.data[idx]?.ytm || 'N/A'}`);
+      console.log(`   YTM after safeNumber: ${holding.other.YTM || 'N/A'}`);
+      console.log(`   Will be stored as: other.YTM = ${holding.other.YTM}`);
+    });
+
     let insertedCount = 0;
     if (holdings.length > 0) {
       const insertResult = await InstrumentHolding.insertMany(holdings);
       insertedCount = insertResult.length;
+      console.log(`\n✅ Successfully inserted ${insertedCount} holdings to database`);
     }
 
     // No need to clean up file (using memory storage)

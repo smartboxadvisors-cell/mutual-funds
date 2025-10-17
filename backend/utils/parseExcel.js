@@ -223,15 +223,16 @@ const COLUMN_MAPPINGS = {
   ],
   issuer: [/issuer/i, /company/i],
   ytm: [
-    /^ytm\s*%/i,               // "YTM %" (most specific first)
-    /^ytm$/i,                  // "YTM" alone
-    /yield.*of.*the.*instrument/i,  // "Yield of the instrument" (ICICI format - most specific)
-    /yield.*instrument/i,      // "Yield instrument"
-    /^yield$/i,                // "YIELD" or "Yield" alone (case-insensitive)
-    /ytm/i,                    // "YTM" anywhere
-    /^%\s*yield/i,             // "% Yield"
-    /yield\s*%/i,              // "Yield %"
-    /yield/i                   // "Yield" anywhere
+    /^yield\s*of\s*the\s*instrument$/i,  // "Yield of the instrument" (ICICI format - HIGHEST PRIORITY)
+    /yield.*of.*the.*instrument/i,       // "Yield of the instrument" with extra text
+    /^ytm\s*%/i,                          // "YTM %"
+    /^ytm$/i,                             // "YTM" alone
+    /yield.*instrument/i,                 // "Yield instrument"
+    /^yield$/i,                           // "YIELD" or "Yield" alone (case-insensitive)
+    /ytm/i,                               // "YTM" anywhere
+    /^%\s*yield/i,                        // "% Yield"
+    /yield\s*%/i,                         // "Yield %"
+    /yield/i                              // "Yield" anywhere (lowest priority)
   ],
   ytc: [
     /^~?ytc/i,                 // "~YTC" or "YTC"
