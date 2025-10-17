@@ -341,6 +341,9 @@ function detectSchemeInfo(worksheet) {
       for (const pattern of datePatterns) {
         const match = value.match(pattern);
         if (match) {
+          console.log('📅 FOUND DATE STRING:', value);
+          console.log('📅 DATE MATCH GROUPS:', match);
+          
           try {
             reportDate = new Date(value);
             if (isNaN(reportDate.getTime())) {
@@ -349,8 +352,19 @@ function detectSchemeInfo(worksheet) {
                 reportDate = new Date(match[3], match[2] - 1 || 0, match[1]);
               }
             }
+            
+            if (reportDate && !isNaN(reportDate.getTime())) {
+              // Format as dd/mm/yyyy
+              const day = String(reportDate.getDate()).padStart(2, '0');
+              const month = String(reportDate.getMonth() + 1).padStart(2, '0');
+              const year = reportDate.getFullYear();
+              const formattedDate = `${day}/${month}/${year}`;
+              
+              console.log('✅ PARSED DATE OBJECT:', reportDate);
+              console.log('✅ FORMATTED AS dd/mm/yyyy:', formattedDate);
+            }
           } catch (e) {
-            // Continue searching
+            console.log('❌ Error parsing date:', e.message);
           }
         }
       }
