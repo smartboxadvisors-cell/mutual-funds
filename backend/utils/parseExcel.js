@@ -306,9 +306,15 @@ function detectSchemeInfo(worksheet) {
         }
       }
       
-      // Detect scheme name patterns (priority order)
+  // Detect scheme name patterns (priority order)
+      // Pattern 0: "SCHEME: UTI - Unit Linked Insurance Plan" (and similar)
+      // Many fund statements place the scheme name on a line starting with
+      // "SCHEME:". Extract everything after the label.
+      if (/^scheme\s*[:\-–—]\s*/i.test(value)) {
+        schemeName = value.replace(/^scheme\s*[:\-–—]\s*/i, '').trim();
+      }
       // Pattern 1: "SCHEME NAME: SBI Short Term Debt Fund"
-      if (/scheme\s*name\s*:/i.test(value)) {
+      else if (/scheme\s*name\s*:/i.test(value)) {
         schemeName = value.replace(/scheme\s*name\s*:/i, '').trim();
       }
       // Pattern 2: Text containing mutual fund keywords (most common format)
