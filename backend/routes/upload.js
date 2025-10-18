@@ -3,7 +3,7 @@ const express = require('express');
 const multer = require('multer');
 const path = require('path');
 const router = express.Router();
-const { parseExcelFile } = require('../utils/parseExcel');
+const { parseExcelFile, parseExcelFileMulti } = require('../utils/parseExcel');
 const Scheme = require('../models/Scheme');
 const InstrumentHolding = require('../models/InstrumentHolding');
 
@@ -45,8 +45,8 @@ router.post('/', upload.single('file'), async (req, res) => {
     // Use buffer from memory storage (Vercel-compatible)
     const fileBuffer = req.file.buffer;
     
-    // Parse Excel file from buffer
-    const parseResult = parseExcelFile(fileBuffer);
+    // Parse Excel file from buffer (multi-scheme aware)
+    const parseResult = parseExcelFileMulti(fileBuffer);
     
     // Use reportDate from form (MANDATORY - validated above)
     let finalReportDate;
@@ -201,3 +201,72 @@ router.post('/', upload.single('file'), async (req, res) => {
 });
 
 module.exports = router;
+    // If multiple scheme sections are present, handle them here and return
+    if (Array.isArray(parseResult.schemes) && parseResult.schemes.length > 0) {
+      const responseSchemes = [];
+      let grandInserted = 0;
+
+      // Helpers
+      const safeNumber = (val) => {
+        if (val === null || val === undefined || val === '') return null;
+        if (typeof val === 'string') {
+          const cleaned = val.trim().replace(/[%,\s]/g, '');
+          if (cleaned === '' || cleaned === '-') return null;
+          const num = Number(cleaned);
+          return isNaN(num) ? null : num;
+        }
+        const num = Number(val);
+        return isNaN(num) ? null : num;
+      };
+      const excelDateToJSDate = (excelSerial) => {
+        if (!excelSerial) return null;
+        if (excelSerial instanceof Date) return isNaN(excelSerial.getTime()) ? null : excelSerial;
+        if (typeof excelSerial === 'string') { const d = new Date(excelSerial); return isNaN(d.getTime()) ? null : d; }
+        if (typeof excelSerial === 'number') { const epoch = new Date(1899, 11, 30); const js = new Date(epoch.getTime() + excelSerial * 86400000); return isNaN(js.getTime()) ? null : js; }
+        return null;
+      };
+
+      for (const group of parseResult.schemes) {
+        if (!group || !group.schemeName) continue;
+        const scheme = await Scheme.findOneAndUpdate(
+          { name: group.schemeName, reportDate: finalReportDate },
+          { name: group.schemeName, reportDate: finalReportDate, originalFilename: req.file.originalname },
+          { upsert: true, new: true, setDefaultsOnInsert: true }
+        );
+        await InstrumentHolding.deleteMany({ schemeId: scheme._id });
+
+        const holdings = (group.data || []).map(item => ({
+          schemeId: scheme._id,
+          instrumentName: item.instrumentName || '',
+          instrumentType: item.instrumentType || '',
+          isin: item.isin || null,
+          quantity: safeNumber(item.quantity),
+          marketValue: safeNumber(item.marketValue),
+          navPercent: safeNumber(item.navPercent),
+          maturityDate: excelDateToJSDate(item.maturityDate),
+          coupon: safeNumber(item.coupon),
+          rating: item.rating || null,
+          sector: item.sector || null,
+          issuer: item.issuer || null,
+          reportDate: finalReportDate,
+          other: { YTM: safeNumber(item.ytm), YTC: safeNumber(item.ytc), _sheetName: item._sheetName }
+        }));
+
+        let insertedCount = 0;
+        if (holdings.length > 0) {
+          const insertResult = await InstrumentHolding.insertMany(holdings);
+          insertedCount = insertResult.length;
+          grandInserted += insertedCount;
+          console.log(`\n�o. Inserted ${insertedCount} holdings for scheme "${scheme.name}"`);
+        }
+
+        responseSchemes.push({ _id: scheme._id, name: scheme.name, reportDate: scheme.reportDate, inserted: insertedCount });
+      }
+
+      return res.json({
+        schemes: responseSchemes,
+        inserted: grandInserted,
+        sheets: (parseResult.sheets || []).map(s => ({ name: s.sheetName, status: s.status, schemeName: s.schemeName || null, dataCount: s.data ? s.data.length : 0 })),
+        totalSheets: parseResult.totalSheets
+      });
+    }

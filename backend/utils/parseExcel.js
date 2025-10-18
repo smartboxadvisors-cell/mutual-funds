@@ -444,6 +444,138 @@ function detectSchemeInfo(worksheet) {
   return { schemeName, reportDate };
 }
 
+// Detect repeated scheme sections within a single worksheet (e.g., UTI EXPOSURE)
+// Returns an array of markers: { row, col, raw, schemeName }
+function findSchemeMarkers(worksheet) {
+  const markers = [];
+  const range = XLSX.utils.decode_range(worksheet['!ref']);
+  for (let r = 0; r <= range.e.r; r++) {
+    const addr = XLSX.utils.encode_cell({ r, c: 0 }); // check column A primarily
+    const cell = worksheet[addr];
+    if (!cell) continue;
+    const value = String(cell.v || '').trim();
+    if (/^scheme\s*[:\-–—]/i.test(value) || /^scheme\s*$/i.test(value)) {
+      let name = value.replace(/^scheme\s*[:\-–—]/i, '').trim();
+      if (!name) {
+        // if bare label, check one cell to the right
+        const right = XLSX.utils.encode_cell({ r, c: 1 });
+        const cell2 = worksheet[right];
+        name = String(cell2?.v || '').trim();
+      }
+      if (name) {
+        // Trim long parenthetical descriptions
+        const paren = name.match(/^([^(]+)\s*\([^)]{30,}\)/);
+        if (paren) name = paren[1].trim();
+      }
+      markers.push({ row: r, col: 0, raw: value, schemeName: name });
+    }
+  }
+  return markers;
+}
+
+// Header detector with a configurable starting row
+function detectColumnHeadersFrom(worksheet, startRow = 0, searchWindow = 40) {
+  const range = XLSX.utils.decode_range(worksheet['!ref']);
+  const columnMap = {};
+  const endRow = Math.min(range.e.r, startRow + searchWindow);
+
+  for (let r = startRow; r <= endRow; r++) {
+    const rowHeaders = {};
+    let headerCount = 0;
+    for (let c = 0; c <= range.e.c; c++) {
+      const cellAddress = XLSX.utils.encode_cell({ r, c });
+      const cell = worksheet[cellAddress];
+      const value = String(cell?.v || '').trim();
+      if (!value) continue;
+      const normalizedValue = value
+        .replace(/[\r\n]+/g, ' ')
+        .replace(/\s+/g, ' ')
+        .replace(/["""'']/g, '"')
+        .replace(/[^\w\s%\/\(\)\-]/gi, ' ')
+        .replace(/\s+/g, ' ')
+        .trim()
+        .toLowerCase();
+
+      for (const [fieldName, patterns] of Object.entries(COLUMN_MAPPINGS)) {
+        if (patterns.some(p => p.test(normalizedValue))) {
+          rowHeaders[fieldName] = c;
+          headerCount++;
+        }
+      }
+    }
+    if (headerCount >= 2) {
+      Object.assign(columnMap, rowHeaders);
+      return { columnMap, headerRowIndex: r };
+    }
+  }
+  return { columnMap: {}, headerRowIndex: -1 };
+}
+
+function detectDateNearRow(worksheet, startRow, lookAhead = 12) {
+  const range = XLSX.utils.decode_range(worksheet['!ref']);
+  const endRow = Math.min(range.e.r, startRow + lookAhead);
+  const datePatterns = [
+    /(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})/,
+    /(\d{1,2})\s+(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)\s*,?\s*(\d{4})/i,
+    /(january|february|march|april|may|june|july|august|september|october|november|december)\s+(\d{1,2})\s*,?\s*(\d{4})/i
+  ];
+  for (let r = startRow; r <= endRow; r++) {
+    for (let c = 0; c < Math.min(10, range.e.c + 1); c++) {
+      const cellAddress = XLSX.utils.encode_cell({ r, c });
+      const cell = worksheet[cellAddress];
+      if (!cell) continue;
+      const value = String(cell.v || '').trim();
+      if (!value) continue;
+      for (const pattern of datePatterns) {
+        const match = value.match(pattern);
+        if (match) {
+          try {
+            let d = new Date(value);
+            if (isNaN(d.getTime()) && match[3]) {
+              d = new Date(match[3], (match[2] - 1) || 0, match[1]);
+            }
+            if (!isNaN(d.getTime())) return d;
+          } catch (_) {}
+        }
+      }
+    }
+  }
+  return null;
+}
+
+function parseSectionRows(worksheet, sheetName, columnMap, headerRowIndex, endRowLimit) {
+  const range = XLSX.utils.decode_range(worksheet['!ref']);
+  const lastRow = Math.min(endRowLimit ?? range.e.r, range.e.r);
+  const sheetData = [];
+  let currentCategory = null;
+  for (let r = headerRowIndex + 1; r <= lastRow; r++) {
+    const rowData = {};
+    for (const [fieldName, colIndex] of Object.entries(columnMap)) {
+      const cellAddress = XLSX.utils.encode_cell({ r, c: colIndex });
+      const cell = worksheet[cellAddress];
+      if (!cell) { rowData[fieldName] = null; continue; }
+      let value = cell.v;
+      if (value === '-' || value === 'NA' || value === 'N/A') value = null;
+      if ((fieldName === 'navPercent' || fieldName === 'ytm' || fieldName === 'ytc') && typeof value === 'number') {
+        const format = cell.z || cell.w || '';
+        const isPercentFormatted = String(format).includes('%');
+        if (isPercentFormatted && value < 1 && value > 0) value = value * 100;
+      }
+      rowData[fieldName] = value;
+    }
+    const categoryName = isCategoryHeader(rowData);
+    if (categoryName) { currentCategory = categoryName; continue; }
+    if (isIrrelevantRow(rowData)) continue;
+    if (!hasValidData(rowData)) continue;
+    if (currentCategory) {
+      rowData.instrumentType = currentCategory;
+      rowData._sheetName = sheetName;
+      sheetData.push(rowData);
+    }
+  }
+  return sheetData;
+}
+
 function isCategoryHeader(rowData) {
   // Categories can be in different columns depending on file format:
   // - NIMF format: categories in instrumentName column
@@ -865,4 +997,60 @@ function parseExcelFile(filePathOrBuffer) {
   };
 }
 
-module.exports = { parseExcelFile };
+// New: Multi-scheme aware parser. Detects multiple "SCHEME:" sections per sheet
+// and returns a structure with entries per scheme.
+function parseExcelFileMulti(filePathOrBuffer) {
+  let workbook;
+  if (Buffer.isBuffer(filePathOrBuffer)) {
+    workbook = XLSX.read(filePathOrBuffer, { type: 'buffer' });
+  } else {
+    workbook = XLSX.readFile(filePathOrBuffer);
+  }
+
+  const result = {
+    schemes: [],
+    totalSheets: workbook.SheetNames.length,
+    data: []
+  };
+
+  for (const sheetName of workbook.SheetNames) {
+    const ws = workbook.Sheets[sheetName];
+    if (!ws || !ws['!ref']) continue;
+    const range = XLSX.utils.decode_range(ws['!ref']);
+    const markers = findSchemeMarkers(ws);
+    if (markers.length <= 1) {
+      // Fall back to single-scheme parsing via existing flow
+      const single = parseExcelFile(filePathOrBuffer);
+      // Wrap as one scheme entry using detected scheme
+      result.schemes.push({
+        schemeName: single.schemeName,
+        reportDate: single.reportDate,
+        data: single.data,
+        sheetName
+      });
+      result.data.push(...single.data.map(r => ({ ...r, __schemeName: single.schemeName })));
+      continue;
+    }
+
+    for (let i = 0; i < markers.length; i++) {
+      const m = markers[i];
+      const nextStartRow = (markers[i + 1]?.row ?? (range.e.r + 1));
+      const endRow = nextStartRow - 1;
+      const { columnMap, headerRowIndex } = detectColumnHeadersFrom(ws, m.row, 40);
+      if (headerRowIndex === -1) continue;
+      const rows = parseSectionRows(ws, sheetName, columnMap, headerRowIndex, endRow);
+      const sectionDate = detectDateNearRow(ws, m.row, 15);
+      result.schemes.push({
+        schemeName: m.schemeName || 'Unknown Scheme',
+        reportDate: sectionDate,
+        data: rows,
+        sheetName
+      });
+      result.data.push(...rows.map(r => ({ ...r, __schemeName: m.schemeName })));
+    }
+  }
+
+  return result;
+}
+
+module.exports = { parseExcelFile, parseExcelFileMulti };
