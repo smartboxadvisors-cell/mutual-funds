@@ -309,9 +309,32 @@ function detectSchemeInfo(worksheet) {
   // Detect scheme name patterns (priority order)
       // Pattern 0: "SCHEME: UTI - Unit Linked Insurance Plan" (and similar)
       // Many fund statements place the scheme name on a line starting with
-      // "SCHEME:". Extract everything after the label.
-      if (/^scheme\s*[:\-–—]\s*/i.test(value)) {
-        schemeName = value.replace(/^scheme\s*[:\-–—]\s*/i, '').trim();
+      // "SCHEME:". Extract everything after the label. Also handle cases where
+      // the label and the name are in adjacent cells (A3 = "SCHEME:", B3 = name).
+      const isSchemeLabelWithText = /^scheme\s*[:\-–—]\s*/i.test(value);
+      const isBareSchemeLabel = /^scheme(?!\s*code)\s*[:\-–—]?\s*$/i.test(value);
+      if (isSchemeLabelWithText) {
+        const extracted = value.replace(/^scheme\s*[:\-–—]\s*/i, '').trim();
+        if (extracted) {
+          let cleaned = extracted;
+          const parenMatch = cleaned.match(/^([^(]+)\s*\([^)]{30,}\)/);
+          if (parenMatch) cleaned = parenMatch[1].trim();
+          schemeName = cleaned;
+        }
+      } else if (isBareSchemeLabel) {
+        // Look to the right for the first non-empty cell in the same row
+        for (let c2 = c + 1; c2 <= Math.min(range.e.c, c + 5); c2++) {
+          const addr2 = XLSX.utils.encode_cell({ r, c: c2 });
+          const cell2 = worksheet[addr2];
+          const val2 = String(cell2?.v || '').trim();
+          if (val2) {
+            let cleaned = val2;
+            const parenMatch = cleaned.match(/^([^(]+)\s*\([^)]{30,}\)/);
+            if (parenMatch) cleaned = parenMatch[1].trim();
+            schemeName = cleaned;
+            break;
+          }
+        }
       }
       // Pattern 1: "SCHEME NAME: SBI Short Term Debt Fund"
       else if (/scheme\s*name\s*:/i.test(value)) {
@@ -325,8 +348,9 @@ function detectSchemeInfo(worksheet) {
           continue; // Skip first line for ICICI
         }
         
-        // Check if it contains fund-related keywords
-        const isFundName = /fund|mutual\s*fund|scheme/i.test(value);
+        // Check if it contains scheme-related keywords
+        // Include common variants like ULIP/Unit Linked Insurance Plan
+        const isFundName = /fund|mutual\s*fund|scheme|unit\s*linked\s*insurance\s*plan|\bulip\b/i.test(value);
         
         // Exclude AMC/fund-house header lines like "UTI MUTUAL FUND", "SBI Mutual Fund"
         const isAMCHeader = /^[-&()\w\s\.]+\bmutual\s*fund\b\s*$/i.test(value);
