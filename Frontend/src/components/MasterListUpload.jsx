@@ -72,7 +72,7 @@ export default function MasterListUpload({ onUploadSuccess }) {
         <div className={styles.uploadArea}>
           <input
             type="file"
-            accept=".xlsx,.xls"
+            accept=".xlsx,.xls,.xlsm"
             onChange={handleFileSelect}
             disabled={uploading}
             className={styles.fileInput}

@@ -14,14 +14,14 @@ const storage = multer.memoryStorage();
 const upload = multer({
   storage,
   fileFilter: (req, file, cb) => {
-    // Accept CSV and Excel files
-    const allowedTypes = ['.csv', '.xlsx', '.xls'];
+    // Accept CSV and Excel files (including XLSM with macros)
+    const allowedTypes = ['.csv', '.xlsx', '.xls', '.xlsm'];
     const ext = path.extname(file.originalname).toLowerCase();
 
     if (allowedTypes.includes(ext)) {
       cb(null, true);
     } else {
-      cb(new Error('Only CSV (.csv) and Excel (.xlsx, .xls) files are allowed'));
+      cb(new Error('Only CSV (.csv) and Excel (.xlsx, .xls, .xlsm) files are allowed'));
     }
   },
   limits: {

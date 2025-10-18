@@ -1528,7 +1528,7 @@ export default function TradePreviewBuilder() {
                 <input
                   type="file"
                   multiple
-                  accept=".csv,.xlsx,.xls"
+                  accept=".csv,.xlsx,.xls,.xlsm"
                   onChange={handleFileInput}
                   className="hidden"
                   id="file-input"
@@ -1539,7 +1539,7 @@ export default function TradePreviewBuilder() {
                   multiple
                   webkitdirectory="true"
                   directory="true"
-                  accept=".csv,.xlsx,.xls"
+                  accept=".csv,.xlsx,.xls,.xlsm"
                   onChange={handleFileInput}
                   className="hidden"
                   id="folder-input"

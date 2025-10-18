@@ -213,7 +213,7 @@ export default function TradingUploadSection({ onUploadSuccess }) {
           <input
                 ref={fileInputRef}
             type="file"
-            accept=".csv,.xlsx,.xls"
+            accept=".csv,.xlsx,.xls,.xlsm"
                 multiple
                 onChange={handleFileSelect}
             disabled={uploading}

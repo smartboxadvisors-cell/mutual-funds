@@ -92,14 +92,14 @@ export default function UploadSection({ onUploadSuccess }) {
       return;
     }
     
-    // Filter Excel files only
+    // Filter Excel files only (including XLSM - Excel with macros)
     const excelFiles = Array.from(files).filter(file => {
       const ext = file.name.toLowerCase().substring(file.name.lastIndexOf('.'));
-      return ['.xlsx', '.xls'].includes(ext);
+      return ['.xlsx', '.xls', '.xlsm'].includes(ext);
     });
 
     if (excelFiles.length === 0) {
-      alert('❌ No Excel files found. Please select .xlsx or .xls files.');
+      alert('❌ No Excel files found. Please select .xlsx, .xls, or .xlsm files.');
       return;
     }
 
@@ -205,7 +205,7 @@ export default function UploadSection({ onUploadSuccess }) {
       <div className={styles.uploadCard}>
         <h3 className={styles.uploadTitle}>📊 Upload Excel Files</h3>
         <p className={styles.uploadDescription}>
-          Upload mutual fund portfolio Excel files (.xlsx, .xls)
+          Upload mutual fund portfolio Excel files (.xlsx, .xls, .xlsm)
         </p>
         
         {/* Report Date Input */}
@@ -246,7 +246,7 @@ export default function UploadSection({ onUploadSuccess }) {
           <input
                 ref={fileInputRef}
             type="file"
-            accept=".xlsx,.xls"
+            accept=".xlsx,.xls,.xlsm"
                 multiple
                 onChange={handleFileSelect}
             disabled={uploading}
