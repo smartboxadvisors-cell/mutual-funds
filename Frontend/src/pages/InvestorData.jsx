@@ -19,8 +19,69 @@ export default function InvestorData() {
   // Track if we're in ISIN mode (clicked from ISIN)
   const [searchMode, setSearchMode] = useState('issuer'); // 'issuer' or 'isin'
   
+  // View mode: 'list' or 'pivot'
+  const [viewMode, setViewMode] = useState('pivot');
+  
+  // Pivot table data
+  const [pivotData, setPivotData] = useState(null);
+  
   const suggestionRef = useRef(null);
   const debouncedIssuerSearch = useDebounce(issuerSearch, 300);
+
+  // Transform data to pivot table format
+  const transformToPivotData = (items) => {
+    if (!items || items.length === 0) return null;
+
+    // Group by ISIN/Issuer + Instrument
+    const grouped = {};
+    const allDates = new Set();
+
+    items.forEach(item => {
+      const key = searchMode === 'issuer' 
+        ? `${item.isin}__${item.instrument_name}`
+        : `${item.issuer}__${item.instrument_name}`;
+      
+      const reportDate = item.report_date || 'N/A';
+      allDates.add(reportDate);
+
+      if (!grouped[key]) {
+        grouped[key] = {
+          identifier: searchMode === 'issuer' ? item.isin : item.issuer,
+          instrumentName: item.instrument_name,
+          dates: {}
+        };
+      }
+
+      if (!grouped[key].dates[reportDate]) {
+        grouped[key].dates[reportDate] = {
+          quantity: 0,
+          marketValue: 0,
+          schemes: []
+        };
+      }
+
+      grouped[key].dates[reportDate].quantity += item.quantity || 0;
+      grouped[key].dates[reportDate].marketValue += item.market_value || 0;
+      grouped[key].dates[reportDate].schemes.push(item.scheme_name);
+    });
+
+    // Convert to array and sort dates
+    const sortedDates = Array.from(allDates).sort((a, b) => {
+      if (a === 'N/A') return 1;
+      if (b === 'N/A') return -1;
+      // Convert dd/mm/yyyy to Date for comparison
+      const [dayA, monthA, yearA] = a.split('/');
+      const [dayB, monthB, yearB] = b.split('/');
+      return new Date(yearB, monthB - 1, dayB) - new Date(yearA, monthA - 1, dayA);
+    });
+
+    const rows = Object.values(grouped);
+
+    return {
+      rows,
+      dates: sortedDates
+    };
+  };
 
   // Load data
   const loadData = async (currentPage = page, searchTerm = issuerSearch) => {
@@ -30,16 +91,25 @@ export default function InvestorData() {
     try {
       const response = await fetchInvestorData({
         page: currentPage,
-        limit,
+        limit: viewMode === 'pivot' ? 1000 : limit, // Load more data for pivot view
         issuer: searchTerm,
       });
       
       setData(response.items || []);
       setTotalPages(response.totalPages || 1);
       setTotal(response.total || 0);
+      
+      // Transform to pivot if in pivot mode
+      if (viewMode === 'pivot' && response.items && response.items.length > 0) {
+        const pivotTransformed = transformToPivotData(response.items);
+        setPivotData(pivotTransformed);
+      } else {
+        setPivotData(null);
+      }
     } catch (err) {
       setError(err.message || 'Failed to load data');
       setData([]);
+      setPivotData(null);
     } finally {
       setLoading(false);
     }
@@ -212,6 +282,30 @@ export default function InvestorData() {
             </button>
           )}
         </div>
+
+        {/* View Mode Toggle */}
+        {issuerSearch && data.length > 0 && (
+          <div className={styles.viewToggle}>
+            <button
+              className={`${styles.viewButton} ${viewMode === 'pivot' ? styles.active : ''}`}
+              onClick={() => {
+                setViewMode('pivot');
+                loadData(1, issuerSearch);
+              }}
+            >
+              📊 Date Timeline View
+            </button>
+            <button
+              className={`${styles.viewButton} ${viewMode === 'list' ? styles.active : ''}`}
+              onClick={() => {
+                setViewMode('list');
+                loadData(1, issuerSearch);
+              }}
+            >
+              📋 Detailed List View
+            </button>
+          </div>
+        )}
       </div>
 
       {/* Stats Section */}
@@ -254,8 +348,112 @@ export default function InvestorData() {
         </div>
       )}
 
-      {/* Data Table */}
-      {!loading && !error && data.length > 0 && (
+      {/* Pivot Table View */}
+      {!loading && !error && viewMode === 'pivot' && pivotData && pivotData.rows.length > 0 && (
+        <div className={styles.tableSection}>
+          <div className={styles.pivotTableHeader}>
+            <h3>📊 Holdings Timeline - Grouped by {searchMode === 'issuer' ? 'ISIN' : 'Issuer'}</h3>
+            <p>Showing quantity and market value across different report dates</p>
+          </div>
+          
+          <div className={styles.pivotTableWrapper}>
+            <table className={styles.pivotTable}>
+              <thead>
+                <tr>
+                  <th className={styles.stickyCol} style={{ minWidth: '150px' }}>
+                    {searchMode === 'issuer' ? 'ISIN' : 'Issuer'}
+                  </th>
+                  <th className={styles.stickyCol2} style={{ minWidth: '200px' }}>
+                    Instrument Name
+                  </th>
+                  {pivotData.dates.map((date, idx) => (
+                    <th key={idx} className={styles.dateHeader} colSpan={2}>
+                      📅 {date}
+                    </th>
+                  ))}
+                </tr>
+                <tr>
+                  <th className={styles.stickyCol}></th>
+                  <th className={styles.stickyCol2}></th>
+                  {pivotData.dates.map((date, idx) => (
+                    <>
+                      <th key={`${idx}-qty`} className={styles.subHeader}>Quantity</th>
+                      <th key={`${idx}-mv`} className={styles.subHeader}>Market Value (₹ L)</th>
+                    </>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {pivotData.rows.map((row, rowIdx) => (
+                  <tr key={rowIdx}>
+                    <td 
+                      className={styles.stickyCol}
+                      style={{ 
+                        cursor: 'pointer', 
+                        color: '#4c51bf',
+                        fontFamily: 'monospace',
+                        fontWeight: 600
+                      }}
+                      onClick={() => {
+                        if (searchMode === 'issuer') {
+                          handleIsinClick(row.identifier);
+                        } else {
+                          handleIssuerClick(row.identifier);
+                        }
+                      }}
+                      title={`Click to view ${searchMode === 'issuer' ? 'all schemes with this ISIN' : 'all holdings from this issuer'}`}
+                    >
+                      {row.identifier}
+                    </td>
+                    <td className={styles.stickyCol2} style={{ fontSize: '0.9rem' }}>
+                      {row.instrumentName}
+                    </td>
+                    {pivotData.dates.map((date, dateIdx) => {
+                      const dateData = row.dates[date];
+                      return (
+                        <>
+                          <td key={`${rowIdx}-${dateIdx}-qty`} className={styles.dataCell}>
+                            {dateData ? (
+                              <div>
+                                <strong>{dateData.quantity.toLocaleString()}</strong>
+                                {dateData.schemes.length > 1 && (
+                                  <div style={{ fontSize: '0.75rem', color: '#718096' }}>
+                                    {dateData.schemes.length} schemes
+                                  </div>
+                                )}
+                              </div>
+                            ) : (
+                              <span style={{ color: '#CBD5E0' }}>—</span>
+                            )}
+                          </td>
+                          <td key={`${rowIdx}-${dateIdx}-mv`} className={styles.dataCell}>
+                            {dateData ? (
+                              <strong style={{ color: '#2D3748' }}>
+                                ₹{dateData.marketValue.toLocaleString()}
+                              </strong>
+                            ) : (
+                              <span style={{ color: '#CBD5E0' }}>—</span>
+                            )}
+                          </td>
+                        </>
+                      );
+                    })}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+
+          <div style={{ marginTop: '1rem', padding: '1rem', background: '#F7FAFC', borderRadius: '8px' }}>
+            <p style={{ fontSize: '0.875rem', color: '#4A5568', margin: 0 }}>
+              💡 <strong>Tip:</strong> Click on any {searchMode === 'issuer' ? 'ISIN' : 'Issuer'} to filter and view detailed information
+            </p>
+          </div>
+        </div>
+      )}
+
+      {/* List Table View */}
+      {!loading && !error && viewMode === 'list' && data.length > 0 && (
         <div className={styles.tableSection}>
           <div className={styles.tableWrapper}>
             <table className={styles.table}>

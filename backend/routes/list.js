@@ -628,6 +628,16 @@ router.get('/investor-data', async (req, res) => {
       // Use reportDate directly from holding (priority) or fallback to scheme reportDate
       const reportDate = item.reportDate || item.schemeId?.reportDate;
       
+      // Format date to dd/mm/yyyy
+      const formatDate = (date) => {
+        if (!date) return '';
+        const d = new Date(date);
+        const day = String(d.getDate()).padStart(2, '0');
+        const month = String(d.getMonth() + 1).padStart(2, '0');
+        const year = d.getFullYear();
+        return `${day}/${month}/${year}`;
+      };
+      
       const transformed = {
         _id: item._id,
         issuer: issuerName,
@@ -636,10 +646,8 @@ router.get('/investor-data', async (req, res) => {
         isin: item.isin || 'N/A',
         quantity: item.quantity || 0,
         market_value: item.marketValue || 0,
-        maturity_date: item.maturityDate ? new Date(item.maturityDate).toLocaleDateString() : 'N/A',
-        report_date: reportDate
-          ? new Date(reportDate).toLocaleDateString()
-          : '',
+        maturity_date: item.maturityDate ? formatDate(item.maturityDate) : 'N/A',
+        report_date: reportDate ? formatDate(reportDate) : '',
         rating: issuerInfo.rating || item.rating || 'N/A',
         ratingGroup: issuerInfo.ratingGroup || null,
         sector: issuerInfo.sector || item.sector || 'N/A',
