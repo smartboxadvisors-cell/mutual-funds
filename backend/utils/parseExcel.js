@@ -328,11 +328,17 @@ function detectSchemeInfo(worksheet) {
         // Check if it contains fund-related keywords
         const isFundName = /fund|mutual\s*fund|scheme/i.test(value);
         
+        // Exclude AMC/fund-house header lines like "UTI MUTUAL FUND", "SBI Mutual Fund"
+        const isAMCHeader = /^[-&()\w\s\.]+\bmutual\s*fund\b\s*$/i.test(value);
+
+        // Exclude meta like "SCHEME CODE ...", "SCHEME CODE STARTS", etc.
+        const isSchemeCodeMeta = /scheme\s*code/i.test(value);
+        
         // Check if it's long enough and doesn't look like a header
         const isLongEnough = value.length > 10;
         const notAHeader = !/^(sr\.?\s*no|name\s*of|isin|rating|quantity|market|portfolio\s*statement)/i.test(value);
         
-        if (isFundName && isLongEnough && notAHeader) {
+        if (isFundName && isLongEnough && notAHeader && !isAMCHeader && !isSchemeCodeMeta) {
           // Extract just the fund name, remove long descriptions in parentheses
           // Example: "Nippon India Corporate Bond Fund (An open ended debt scheme...)" 
           // -> "Nippon India Corporate Bond Fund"
